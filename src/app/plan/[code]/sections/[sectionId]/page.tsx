@@ -70,6 +70,16 @@ export default async function SectionPage({
       <PlanHeader title={section.title} backHref={backHref} color={color.button} logoUrl={org.logoUrl} />
 
       <div className="mx-auto max-w-lg p-4">
+        {sectionCategory?.key === "reunification" && (
+          <Link
+            href={`/status/${code}`}
+            target="_blank"
+            className="mb-3 block rounded-xl border-2 border-amber-400 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            Open the public status page — share this with families for live updates and pick-up info →
+          </Link>
+        )}
+
         {pages && pages.length > 0 ? (
           <div className="space-y-2">
             {pages.map((page) => (

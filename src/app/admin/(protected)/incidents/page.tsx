@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Incident, Profile } from "@/lib/supabase/types";
+import type { Incident, IncidentUpdate, Profile } from "@/lib/supabase/types";
 import { IncidentsPanel } from "./incidents-panel";
 
 export default async function AdminIncidentsPage() {
@@ -17,15 +17,27 @@ export default async function AdminIncidentsPage() {
     .maybeSingle<Profile>();
   if (!profile?.org_id) return null;
 
-  const { data: incidents } = await supabase
-    .from("incidents")
-    .select("id, org_id, name, status, started_at, closed_at")
-    .eq("org_id", profile.org_id)
-    .order("started_at", { ascending: false })
-    .returns<Incident[]>();
+  const [{ data: org }, { data: incidents }] = await Promise.all([
+    supabase.from("organizations").select("org_code").eq("id", profile.org_id).single(),
+    supabase
+      .from("incidents")
+      .select("id, org_id, name, status, started_at, closed_at")
+      .eq("org_id", profile.org_id)
+      .order("started_at", { ascending: false })
+      .returns<Incident[]>(),
+  ]);
 
   const activeIncident = (incidents ?? []).find((i) => i.status === "active") ?? null;
   const closedIncidents = (incidents ?? []).filter((i) => i.status === "closed");
+
+  const { data: updates } = activeIncident
+    ? await supabase
+        .from("incident_updates")
+        .select("id, org_id, incident_id, message, created_at")
+        .eq("incident_id", activeIncident.id)
+        .order("created_at", { ascending: false })
+        .returns<IncidentUpdate[]>()
+    : { data: [] as IncidentUpdate[] };
 
   return (
     <div className="space-y-6">
@@ -37,7 +49,13 @@ export default async function AdminIncidentsPage() {
         </p>
       </div>
 
-      <IncidentsPanel orgId={profile.org_id} activeIncident={activeIncident} closedIncidents={closedIncidents} />
+      <IncidentsPanel
+        orgId={profile.org_id}
+        orgCode={org?.org_code ?? ""}
+        activeIncident={activeIncident}
+        closedIncidents={closedIncidents}
+        updates={updates ?? []}
+      />
     </div>
   );
 }

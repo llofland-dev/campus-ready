@@ -33,6 +33,10 @@ export default function SplashPage() {
           ·{" "}
           <Link href="/terms" className="underline">
             Terms
+          </Link>{" "}
+          ·{" "}
+          <Link href="/admin" className="underline">
+            Staff/Admin
           </Link>
         </p>
       </div>

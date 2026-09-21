@@ -132,3 +132,11 @@ export interface ChecklistEvent {
   actor_name: string | null;
   created_at: string;
 }
+
+export interface IncidentUpdate {
+  id: string;
+  org_id: string;
+  incident_id: string;
+  message: string;
+  created_at: string;
+}
