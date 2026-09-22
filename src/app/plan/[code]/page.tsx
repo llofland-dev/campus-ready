@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Contact } from "@/lib/supabase/types";
 import { CATEGORIES } from "@/lib/categories";
 import { PALETTE } from "@/lib/palette";
-import { AlertIcon, ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
+import { ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
 import { PlanHeader } from "./plan-header";
 import { AccessGate } from "./access-gate";
 
@@ -53,8 +53,11 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
     .returns<Contact[]>();
 
   const byKey = new Map(PALETTE.map((c) => [c.key, c]));
+  // "ics" is handled below as the merged Incident Management tile instead
+  // of the generic category-tile loop — see the comment in lib/categories.ts.
+  const incidentManagementCategory = CATEGORIES.find((c) => c.key === "ics")!;
   const tiles = [
-    ...CATEGORIES.filter((c) => !c.requiresAdminTier || org.tier === "admin").map((c) => ({
+    ...CATEGORIES.filter((c) => c.key !== "ics" && (!c.requiresAdminTier || org.tier === "admin")).map((c) => ({
       href: `/plan/${code}/categories/${c.key}`,
       label: c.label,
       icon: c.icon,
@@ -82,9 +85,9 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
       ? [
           {
             href: `/plan/${code}/incident-management`,
-            label: "Incident Management",
-            icon: AlertIcon,
-            color: byKey.get("orange")!,
+            label: incidentManagementCategory.label,
+            icon: incidentManagementCategory.icon,
+            color: incidentManagementCategory.color,
           },
         ]
       : []),

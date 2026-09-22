@@ -19,6 +19,9 @@ export default async function CategoryPage({
   const category = categoryByKey(categoryKey);
   if (!category) notFound();
   if (category.requiresAdminTier && org.tier !== "admin") redirect(`/plan/${code}`);
+  // "ics" has no home tile or listing page of its own anymore — its content
+  // moved into the merged Incident Management page (see lib/categories.ts).
+  if (categoryKey === "ics") redirect(`/plan/${code}/incident-management`);
 
   const admin = createAdminClient();
   const { allSections, sections, checklists } = await fetchCategoryContent(admin, org.id, categoryKey);

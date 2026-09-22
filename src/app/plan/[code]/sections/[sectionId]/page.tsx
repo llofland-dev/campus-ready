@@ -63,6 +63,10 @@ export default async function SectionPage({
       categorySections,
       categoryChecklists ?? []
     );
+    // "ics" has no home tile of its own (see lib/categories.ts) — its
+    // content now lives inside the merged Incident Management page, not
+    // the generic category listing leafBackHref would otherwise point to.
+    if (section.category === "ics") backHref = `/plan/${code}/incident-management`;
   }
 
   return (
