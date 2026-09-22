@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { getVerifiedOrg, lookupOrgByCode } from "@/lib/eop-org";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Contact } from "@/lib/supabase/types";
+import type { Contact, Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { CATEGORIES } from "@/lib/categories";
 import { PALETTE } from "@/lib/palette";
-import { ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
+import { AlertIcon, ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
 import { PlanHeader } from "./plan-header";
 import { AccessGate } from "./access-gate";
 
@@ -44,13 +44,34 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
   }
 
   const admin = createAdminClient();
-  const { data: pinnedContacts } = await admin
-    .from("contacts")
-    .select("id, org_id, name, role_title, phone, email, category, pinned, sort_order, created_at")
-    .eq("org_id", org.id)
-    .eq("pinned", true)
-    .order("sort_order")
-    .returns<Contact[]>();
+  const [{ data: pinnedContacts }, { data: activeIncidents }] = await Promise.all([
+    admin
+      .from("contacts")
+      .select("id, org_id, name, role_title, phone, email, category, pinned, sort_order, created_at")
+      .eq("org_id", org.id)
+      .eq("pinned", true)
+      .order("sort_order")
+      .returns<Contact[]>(),
+    admin
+      .from("incidents")
+      .select("id, org_id, name, status, started_at, closed_at")
+      .eq("org_id", org.id)
+      .eq("status", "active")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .returns<Incident[]>(),
+  ]);
+  const activeIncident = activeIncidents?.[0] ?? null;
+
+  const { data: latestUpdate } = activeIncident
+    ? await admin
+        .from("incident_updates")
+        .select("id, org_id, incident_id, message, created_at")
+        .eq("incident_id", activeIncident.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<IncidentUpdate>()
+    : { data: null };
 
   const byKey = new Map(PALETTE.map((c) => [c.key, c]));
   // "ics" is handled below as the merged Incident Management tile instead
@@ -98,6 +119,23 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
       <PlanHeader title={org.name} logoUrl={org.logoUrl} />
 
       <div className="mx-auto max-w-lg p-4">
+        {activeIncident && (
+          <Link
+            href={org.tier === "admin" ? `/plan/${code}/incident-management/status` : `/status/${code}`}
+            className="mb-4 block animate-pulse rounded-xl border-2 border-red-500 bg-red-50 p-3 dark:bg-red-950/30"
+          >
+            <div className="flex items-center gap-2">
+              <AlertIcon className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+              <p className="text-sm font-semibold text-red-900 dark:text-red-200">
+                Active incident — {activeIncident.name}
+              </p>
+            </div>
+            {latestUpdate && (
+              <p className="mt-1 truncate text-xs text-red-800 dark:text-red-300">{latestUpdate.message}</p>
+            )}
+          </Link>
+        )}
+
         {pinnedContacts && pinnedContacts.length > 0 && (
           <div className="mb-4 space-y-2">
             {pinnedContacts.map((contact) => (
