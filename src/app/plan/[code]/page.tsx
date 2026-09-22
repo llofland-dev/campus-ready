@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Contact } from "@/lib/supabase/types";
 import { CATEGORIES } from "@/lib/categories";
 import { PALETTE } from "@/lib/palette";
-import { ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
+import { AlertIcon, ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
 import { PlanHeader } from "./plan-header";
 import { AccessGate } from "./access-gate";
 
@@ -78,6 +78,16 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
       icon: ChecklistIcon,
       color: byKey.get("gold")!,
     },
+    ...(org.tier === "admin"
+      ? [
+          {
+            href: `/plan/${code}/incident-management`,
+            label: "Incident Management",
+            icon: AlertIcon,
+            color: byKey.get("orange")!,
+          },
+        ]
+      : []),
   ];
 
   return (
