@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
+import { MailIncidentReport } from "@/components/mail-incident-report";
 
 // `toLocaleString()` depends on the runtime's locale/timezone, which can
 // differ between this server-rendered pass (Node) and the browser that
@@ -156,15 +157,19 @@ function UpdatesComposer({
 export function IncidentsPanel({
   orgId,
   orgCode,
+  orgName,
   activeIncident,
   closedIncidents,
   updates,
+  contactOptions,
 }: {
   orgId: string;
   orgCode: string;
+  orgName: string;
   activeIncident: Incident | null;
   closedIncidents: Incident[];
   updates: IncidentUpdate[];
+  contactOptions: { name: string; roleTitle: string | null; email: string }[];
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -231,6 +236,17 @@ export function IncidentsPanel({
             </button>
 
             <UpdatesComposer orgId={orgId} incidentId={activeIncident.id} updates={updates} />
+
+            <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+              <MailIncidentReport
+                orgName={orgName}
+                incidentName={activeIncident.name}
+                startedAt={activeIncident.started_at}
+                closedAt={activeIncident.closed_at}
+                updates={updates}
+                contactOptions={contactOptions}
+              />
+            </div>
           </>
         ) : (
           <>

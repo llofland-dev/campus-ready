@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Incident, IncidentUpdate, Profile } from "@/lib/supabase/types";
+import type { Contact, Incident, IncidentUpdate, Profile } from "@/lib/supabase/types";
 import { IncidentsPanel } from "./incidents-panel";
 
 export default async function AdminIncidentsPage() {
@@ -17,15 +17,28 @@ export default async function AdminIncidentsPage() {
     .maybeSingle<Profile>();
   if (!profile?.org_id) return null;
 
-  const [{ data: org }, { data: incidents }] = await Promise.all([
-    supabase.from("organizations").select("org_code").eq("id", profile.org_id).single(),
+  const [{ data: org }, { data: incidents }, { data: emailContacts }] = await Promise.all([
+    supabase.from("organizations").select("name, org_code").eq("id", profile.org_id).single(),
     supabase
       .from("incidents")
       .select("id, org_id, name, status, started_at, closed_at")
       .eq("org_id", profile.org_id)
       .order("started_at", { ascending: false })
       .returns<Incident[]>(),
+    supabase
+      .from("contacts")
+      .select("id, org_id, name, role_title, phone, email, category, pinned, sort_order, created_at")
+      .eq("org_id", profile.org_id)
+      .not("email", "is", null)
+      .order("sort_order")
+      .returns<Contact[]>(),
   ]);
+
+  const contactOptions = (emailContacts ?? []).map((c) => ({
+    name: c.name,
+    roleTitle: c.role_title,
+    email: c.email!,
+  }));
 
   const activeIncident = (incidents ?? []).find((i) => i.status === "active") ?? null;
   const closedIncidents = (incidents ?? []).filter((i) => i.status === "closed");
@@ -52,9 +65,11 @@ export default async function AdminIncidentsPage() {
       <IncidentsPanel
         orgId={profile.org_id}
         orgCode={org?.org_code ?? ""}
+        orgName={org?.name ?? ""}
         activeIncident={activeIncident}
         closedIncidents={closedIncidents}
         updates={updates ?? []}
+        contactOptions={contactOptions}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getVerifiedOrg } from "@/lib/eop-org";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
+import type { Contact, Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { PlanHeader } from "../../plan-header";
 import { IncidentManagementPanel } from "../incident-management-panel";
 
@@ -35,11 +35,31 @@ export default async function IncidentStatusPage({ params }: { params: Promise<{
         .returns<IncidentUpdate[]>()
     : { data: [] as IncidentUpdate[] };
 
+  const { data: emailContacts } = await admin
+    .from("contacts")
+    .select("id, org_id, name, role_title, phone, email, category, pinned, sort_order, created_at")
+    .eq("org_id", org.id)
+    .not("email", "is", null)
+    .order("sort_order")
+    .returns<Contact[]>();
+
+  const contactOptions = (emailContacts ?? []).map((c) => ({
+    name: c.name,
+    roleTitle: c.role_title,
+    email: c.email!,
+  }));
+
   return (
     <div>
       <PlanHeader title="Incident Status" backHref={`/plan/${code}/incident-management`} logoUrl={org.logoUrl} />
       <div className="mx-auto max-w-lg p-4">
-        <IncidentManagementPanel code={code} activeIncident={activeIncident} updates={updates ?? []} />
+        <IncidentManagementPanel
+          code={code}
+          orgName={org.name}
+          activeIncident={activeIncident}
+          updates={updates ?? []}
+          contactOptions={contactOptions}
+        />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
+import { MailIncidentReport } from "@/components/mail-incident-report";
 
 async function callAction(body: Record<string, unknown>) {
   const res = await fetch("/api/incident-action", {
@@ -16,12 +17,16 @@ async function callAction(body: Record<string, unknown>) {
 
 export function IncidentManagementPanel({
   code,
+  orgName,
   activeIncident,
   updates,
+  contactOptions,
 }: {
   code: string;
+  orgName: string;
   activeIncident: Incident | null;
   updates: IncidentUpdate[];
+  contactOptions: { name: string; roleTitle: string | null; email: string }[];
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -135,6 +140,17 @@ export function IncidentManagementPanel({
                 ))}
               </ul>
             )}
+
+            <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+              <MailIncidentReport
+                orgName={orgName}
+                incidentName={activeIncident.name}
+                startedAt={activeIncident.started_at}
+                closedAt={activeIncident.closed_at}
+                updates={updates}
+                contactOptions={contactOptions}
+              />
+            </div>
           </>
         ) : (
           <>
