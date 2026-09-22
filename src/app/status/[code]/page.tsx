@@ -5,6 +5,7 @@ import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { Markdown } from "@/components/markdown";
 import { AlertIcon, ClipboardIcon, ChevronRightIcon } from "@/components/icons";
 import { AutoRefresh } from "./auto-refresh";
+import { BackButton } from "./back-button";
 
 // Public, no-login, no-plan-code-gate page — deliberately outside the
 // staff /plan/[code] session-cookie flow (see src/lib/eop-org.ts). The
@@ -59,6 +60,7 @@ export default async function StatusPage({ params }: { params: Promise<{ code: s
 
       <header className="bg-[#0b2545] px-4 py-4 text-white shadow-sm">
         <div className="mx-auto flex max-w-lg items-center gap-2">
+          <BackButton />
           {org.logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={org.logoUrl} alt="" className="h-7 w-7 shrink-0 rounded bg-white object-contain p-0.5" />

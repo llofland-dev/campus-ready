@@ -65,7 +65,6 @@ export default async function PlanPageView({
         {sectionCategory?.key === "reunification" && (
           <Link
             href={`/status/${code}`}
-            target="_blank"
             className="block rounded-xl border-2 border-amber-400 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
           >
             Open the public status page — share this with families for live updates and pick-up info →
