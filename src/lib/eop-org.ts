@@ -25,6 +25,21 @@ function orgLogoUrl(supabase: StorageOnly, logoPath: string | null): string | nu
   return supabase.storage.from("org-logos").getPublicUrl(logoPath).data.publicUrl;
 }
 
+// Plan codes are stored uppercase (signup normalizes them), but a code can
+// reach the server in any case — a hand-typed URL, a link or QR code someone
+// generated in lowercase. Normalizing here (rather than only on the /code
+// entry screen) means every path resolves the same org instead of showing
+// "Code not found" for /plan/adventist.
+export function normalizeOrgCode(code: string): string {
+  let decoded = code;
+  try {
+    decoded = decodeURIComponent(code);
+  } catch {
+    // already-decoded or malformed — use as given
+  }
+  return decoded.trim().toUpperCase();
+}
+
 // Public, pre-auth lookup — just enough to know whether a code exists and
 // whether to show a password field. Uses the anon key directly; safe
 // because eop_lookup_org never returns the password hash.
@@ -33,7 +48,7 @@ export async function lookupOrgByCode(code: string): Promise<OrgLookup> {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
-  const { data } = await supabase.rpc("eop_lookup_org", { p_code: code });
+  const { data } = await supabase.rpc("eop_lookup_org", { p_code: normalizeOrgCode(code) });
   const row = data && data.length > 0 ? data[0] : null;
   if (!row) return null;
   return { ...row, logoUrl: orgLogoUrl(supabase, row.logo_path) };
@@ -60,6 +75,6 @@ export async function getVerifiedOrg(
   // A suspended org's staff can't be given a way back in just because their
   // cookie predates the suspension. `=== false` (not just falsy) so this
   // defaults open if the `active` migration hasn't run yet.
-  if (!data || data.org_code !== code || data.active === false) return null;
+  if (!data || data.org_code.toUpperCase() !== normalizeOrgCode(code) || data.active === false) return null;
   return { ...data, logoUrl: orgLogoUrl(admin, data.logo_path), tier: session.tier };
 }

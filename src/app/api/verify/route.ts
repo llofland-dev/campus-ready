@@ -1,16 +1,27 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createSessionCookie } from "@/lib/eop-session";
+import { normalizeOrgCode } from "@/lib/eop-org";
+import { jsonError, readJsonObject } from "@/lib/api-utils";
 
 // Re-verifies server-side regardless of what the client already checked —
 // the client-side lookup (for deciding whether to show a password field) is
 // UX only, not a security boundary. This is the only place the org-code +
 // password gate is actually enforced.
 export async function POST(request: Request) {
-  const { code, password } = (await request.json()) as { code?: string; password?: string };
+  const body = await readJsonObject(request);
+  if (!body) {
+    return jsonError("Invalid request", 400);
+  }
 
-  if (!code) {
-    return NextResponse.json({ error: "Missing code" }, { status: 400 });
+  const code = typeof body.code === "string" ? normalizeOrgCode(body.code) : "";
+  const password = typeof body.password === "string" ? body.password : undefined;
+  // Set by "Unlock admin access" inside an already-open plan: only the admin
+  // passphrase is acceptable there (see the check before the cookie is issued).
+  const requireAdmin = body.requireAdmin === true;
+
+  if (!code || code.length > 64 || (password && password.length > 200)) {
+    return jsonError("Missing or invalid code", 400);
   }
 
   const supabase = createSupabaseClient(
@@ -58,6 +69,13 @@ export async function POST(request: Request) {
     }
   } else if (org.has_password) {
     return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
+  }
+
+  // Anything short of the admin passphrase must fail loudly and leave the
+  // caller's current session untouched, rather than quietly issuing a fresh
+  // User-level cookie (which is what the optional-password path above does).
+  if (requireAdmin && tier !== "admin") {
+    return NextResponse.json({ error: "Incorrect admin passphrase" }, { status: 401 });
   }
 
   const cookie = createSessionCookie(org.id, tier);

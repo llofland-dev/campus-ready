@@ -1,0 +1,50 @@
+# Runs the post-deploy smoke test (scripts/smoke, see docs/SMOKE_TEST.md) after each
+# successful PRODUCTION deploy on Vercel, and on demand from the Actions tab.
+#
+# It needs three repository secrets (Settings -> Secrets and variables -> Actions),
+# taken from this app's .env.local. The service-role key is powerful: it can create
+# and delete data. Keep this repository private and limit who has access to it.
+#   SMOKE_SUPABASE_URL              (NEXT_PUBLIC_SUPABASE_URL)
+#   SMOKE_SUPABASE_ANON_KEY         (NEXT_PUBLIC_SUPABASE_ANON_KEY)
+#   SMOKE_SUPABASE_SERVICE_ROLE_KEY (SUPABASE_SERVICE_ROLE_KEY)
+
+name: Post-deploy smoke test
+
+on:
+  deployment_status:
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-test
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    # Only after a successful production deployment (or when started by hand).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       startsWith(github.event.deployment.environment, 'Production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # --no-logs: the Vercel error-log check needs the Vercel CLI signed in, which
+      # a CI runner doesn't have. Everything else runs as it does locally.
+      - name: Run the smoke test against production
+        run: node scripts/smoke/run.mjs --no-logs
+        env:
+          SMOKE_BASE_URL: https://campus-ready.vercel.app
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SMOKE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SMOKE_SUPABASE_SERVICE_ROLE_KEY }}

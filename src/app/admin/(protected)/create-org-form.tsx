@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { ORG_CODE_HINT, ORG_CODE_HTML_PATTERN, validateOrgCode, validateOrgName } from "@/lib/org-code";
 
-// Reached when a signed-in admin has no org yet — normally only a brief gap
-// right after sign-up (see admin/signup/page.tsx: if email confirmation was
-// pending, the org-creation RPC couldn't run yet since it requires an
-// authenticated session). Same RPC, just triggered here instead, so there's
-// always a way to finish setup after confirming.
+// Reached when a signed-in admin has no org yet — the first sign-in of an
+// account the developer created for a new customer (self-service sign-up is
+// closed; see docs/CUSTOMER_ONBOARDING.md). The org-creation RPC requires an
+// authenticated session, so it runs here, after that first sign-in.
 export function CreateOrgForm({
   pendingName,
   pendingCode,
@@ -27,6 +27,13 @@ export function CreateOrgForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const problem = validateOrgName(name) ?? validateOrgCode(code);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await supabase.rpc("eop_create_org_for_self", {
@@ -78,9 +85,13 @@ export function CreateOrgForm({
           required
           value={code}
           onChange={(e) => setCode(e.target.value)}
+          pattern={ORG_CODE_HTML_PATTERN}
+          title={ORG_CODE_HINT}
+          maxLength={24}
           placeholder="e.g. ACME2026"
           className="w-full rounded-md border border-black/10 bg-transparent px-3 py-2 text-sm uppercase outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30"
         />
+        <p className="text-xs text-zinc-500">{ORG_CODE_HINT}</p>
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

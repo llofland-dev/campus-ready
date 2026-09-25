@@ -32,6 +32,7 @@ export default function AdminLoginPage() {
     // very next request and bouncing back to /admin/login. A hard
     // navigation can't be issued until the cookie write is committed, which
     // avoids the race by construction.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/admin";
   }
 
@@ -95,13 +96,6 @@ export default function AdminLoginPage() {
         <p className="text-center text-sm text-zinc-500">
           <Link href="/admin/forgot-password" className="underline">
             Forgot password?
-          </Link>
-        </p>
-
-        <p className="text-center text-sm text-zinc-500">
-          New organization?{" "}
-          <Link href="/admin/signup" className="underline">
-            Set up your plan
           </Link>
         </p>
       </form>

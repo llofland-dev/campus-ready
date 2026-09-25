@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /$
+Allow: /privacy
+Allow: /terms
+Allow: /support
+Disallow: /plan/
+Disallow: /admin/
+Disallow: /api/

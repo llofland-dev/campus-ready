@@ -1,4 +1,5 @@
 import { getVerifiedOrg } from "@/lib/eop-org";
+import { PlanOfflineSync } from "./plan-offline-sync";
 import { PlanToolbar } from "./plan-toolbar";
 
 export default async function PlanLayout({
@@ -20,6 +21,7 @@ export default async function PlanLayout({
     <div className="min-h-screen bg-zinc-50 pb-24 dark:bg-black">
       {children}
       <PlanToolbar code={code} />
+      <PlanOfflineSync code={code} />
     </div>
   );
 }

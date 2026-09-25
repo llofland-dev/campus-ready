@@ -4,6 +4,7 @@ import type { Organization, Profile } from "@/lib/supabase/types";
 import { AdminNav } from "./admin-nav";
 import { SignOutButton } from "./sign-out-button";
 import { CreateOrgForm } from "./create-org-form";
+import { DeleteAccountPanel } from "./delete-account-panel";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const supabase = await createClient();
@@ -36,7 +37,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black">
-      <header className="flex items-center justify-between border-b border-black/10 px-6 py-4 dark:border-white/10">
+      <header className="safe-top-4 flex items-center justify-between border-b border-black/10 px-6 py-4 dark:border-white/10">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-white p-1">
             {orgLogoUrl ? (
@@ -73,6 +74,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           />
         )}
       </main>
+
+      <DeleteAccountPanel orgCode={org?.org_code ?? null} />
     </div>
   );
 }

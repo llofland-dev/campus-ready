@@ -3,7 +3,7 @@ import mammoth from "mammoth";
 import TurndownService from "turndown";
 import * as cheerio from "cheerio";
 import ExcelJS from "exceljs";
-import { PDFParse } from "pdf-parse";
+import { blocksToMarkdown, extractPdfBlocks, type PdfBlock } from "./pdf-text";
 
 // Converts an uploaded document into a draft the admin reviews and edits
 // before anything is written to the database (see the review UI in
@@ -22,11 +22,15 @@ export interface DraftPage {
 export interface SectionDraft {
   title: string;
   pages: DraftPage[];
+  // Plain-language heads-up for the admin reviewing the draft (things that
+  // were left out or approximated), shown above the draft in the review step.
+  notes?: string[];
 }
 
 export interface ChecklistDraft {
   title: string;
   items: string[];
+  notes?: string[];
 }
 
 const turndown = new TurndownService({ headingStyle: "atx", bulletListMarker: "-" });
@@ -55,9 +59,25 @@ turndown.addRule("table", {
   },
 });
 
-async function docxToHtml(buffer: Buffer): Promise<{ html: string; warnings: string[] }> {
-  const result = await mammoth.convertToHtml({ buffer });
-  return { html: result.value, warnings: result.messages.map((m) => m.message) };
+// Embedded pictures are dropped rather than converted: mammoth would inline
+// each one as a base64 data URL, which bloats the saved page enormously and is
+// blocked by the Markdown renderer's URL sanitizer anyway (so it would never
+// display). The admin is told how many were left out.
+async function docxToHtml(buffer: Buffer): Promise<{ html: string; images: number }> {
+  const result = await mammoth.convertToHtml(
+    { buffer },
+    { convertImage: mammoth.images.imgElement(async () => ({ src: "" })) }
+  );
+  const $ = cheerio.load(result.value, { xml: false });
+  const images = $("img").length;
+  $("img").remove();
+  return { html: $("body").html() ?? result.value, images };
+}
+
+function imageNote(images: number): string[] {
+  return images > 0
+    ? [`${images} picture${images === 1 ? " was" : "s were"} in the document but can't be imported — only text and tables come across.`]
+    : [];
 }
 
 function fallbackTitle(filename: string): string {
@@ -71,17 +91,30 @@ function fallbackTitle(filename: string): string {
 // split it up afterward in the existing Plan Content editor, same as any
 // other page edit.
 async function parseDocxAsSection(buffer: Buffer, filename: string): Promise<SectionDraft> {
-  const { html } = await docxToHtml(buffer);
+  const { html, images } = await docxToHtml(buffer);
   const $ = cheerio.load(html, { xml: false });
+  const notes = imageNote(images);
 
   const headings = $("h1, h2").toArray();
 
   if (headings.length === 0) {
     const markdown = turndown.turndown($("body").html() ?? html).trim();
-    return { title: fallbackTitle(filename), pages: [{ title: "Page 1", body: markdown }] };
+    return { title: fallbackTitle(filename), pages: [{ title: "Page 1", body: markdown }], notes };
   }
 
   const pages: DraftPage[] = [];
+
+  // Anything before the first heading (a title block, an introduction) used to
+  // be silently dropped; keep it as its own page.
+  const intro = $("<div></div>");
+  for (const el of $("body").children().toArray()) {
+    const tag = (el as { tagName?: string }).tagName?.toLowerCase();
+    if (tag === "h1" || tag === "h2") break;
+    intro.append($(el).clone());
+  }
+  const introMarkdown = turndown.turndown(intro.html() ?? "").trim();
+  if (introMarkdown) pages.push({ title: "Overview", body: introMarkdown });
+
   for (let i = 0; i < headings.length; i++) {
     const heading = headings[i];
     const title = $(heading).text().trim() || `Page ${i + 1}`;
@@ -95,7 +128,7 @@ async function parseDocxAsSection(buffer: Buffer, filename: string): Promise<Sec
     pages.push({ title, body: markdown });
   }
 
-  return { title: fallbackTitle(filename), pages };
+  return { title: fallbackTitle(filename), pages, notes };
 }
 
 // Checklist import: table rows shaped like {#, Action, Responsible,
@@ -105,7 +138,7 @@ async function parseDocxAsSection(buffer: Buffer, filename: string): Promise<Sec
 // paragraphs when there's no table — same "PHASE:" marker convention used
 // throughout this app's existing checklists.
 async function parseDocxAsChecklist(buffer: Buffer, filename: string): Promise<ChecklistDraft> {
-  const { html } = await docxToHtml(buffer);
+  const { html, images } = await docxToHtml(buffer);
   const $ = cheerio.load(html, { xml: false });
 
   const items: string[] = [];
@@ -170,19 +203,39 @@ async function parseDocxAsChecklist(buffer: Buffer, filename: string): Promise<C
   } else {
     // No table: flatten headings/bold paragraphs as phase markers and every
     // list item / plain paragraph as its own item.
+    //
+    // Nested lists are walked recursively, taking each <li>'s *own* text only.
+    // Reading a parent <li>'s full text and then also visiting its nested
+    // <li>s (what a flat `find("li")` does) emits the same sentences twice:
+    // once glued together inside the parent, once again as separate items.
+    const collectListItems = (list: Parameters<typeof $>[0]) => {
+      $(list)
+        .children("li")
+        .toArray()
+        .forEach((li) => {
+          const ownText = $(li)
+            .clone()
+            .children("ul, ol")
+            .remove()
+            .end()
+            .text()
+            .replace(/\s+/g, " ")
+            .trim();
+          if (ownText) items.push(ownText);
+          $(li)
+            .children("ul, ol")
+            .toArray()
+            .forEach(collectListItems);
+        });
+    };
+
     $("body")
       .children()
       .toArray()
       .forEach((el) => {
         const tag = (el as { tagName?: string }).tagName?.toLowerCase();
         if (tag === "ul" || tag === "ol") {
-          $(el)
-            .find("li")
-            .toArray()
-            .forEach((li) => {
-              const text = $(li).text().trim();
-              if (text) items.push(text);
-            });
+          collectListItems(el);
         } else if (tag === "h1" || tag === "h2" || tag === "h3") {
           const text = $(el).text().trim();
           if (text) items.push(`PHASE: ${text}`);
@@ -195,121 +248,294 @@ async function parseDocxAsChecklist(buffer: Buffer, filename: string): Promise<C
       });
   }
 
-  return { title: fallbackTitle(filename), items };
+  return { title: fallbackTitle(filename), items, notes: imageNote(images) };
 }
 
-// ExcelJS cell values aren't always plain strings/numbers — rich text,
-// formulas, and hyperlinks all come back as distinct object shapes.
-function cellText(value: unknown): string {
-  if (value == null) return "";
-  if (value instanceof Date) return value.toLocaleDateString();
-  if (typeof value !== "object") return String(value);
+// A problem the admin can fix (an unreadable or empty file), reported to them
+// as-is — as opposed to a bug, which they only get a generic message for.
+export class UserFacingImportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingImportError";
+  }
+}
 
-  const v = value as { richText?: { text: string }[]; text?: unknown; result?: unknown; hyperlink?: string };
-  if (Array.isArray(v.richText)) return v.richText.map((r) => r.text).join("");
-  if (typeof v.result !== "undefined") return cellText(v.result);
-  // Hyperlink cells nest their display text as { text: <richText object>,
-  // hyperlink: "..." } rather than a plain string — recurse rather than
-  // assuming .text is already a string.
-  if (typeof v.text !== "undefined") return cellText(v.text);
+// ---------------------------------------------------------------------------
+// Spreadsheets (.xlsx)
+// ---------------------------------------------------------------------------
+
+const ROWS_PER_PAGE = 40; // keeps each page readable on a phone
+const MAX_ROWS_PER_SHEET = 2000;
+const MAX_PAGES = 60;
+const MAX_CHECKLIST_ITEMS = 500;
+const MAX_COLUMNS = 100;
+
+// Shows a number the way the spreadsheet does (percentages, decimals,
+// thousands separators, phone-number formats) instead of the raw stored value.
+function formatNumber(value: number, numFmt: string | undefined): string {
+  const fmt = (numFmt ?? "General").replace(/"/g, "");
+  if (fmt === "General") return String(value);
+  const decimals = fmt.match(/\.(0+)/)?.[1].length;
+  if (fmt.includes("%")) return `${(value * 100).toFixed(decimals ?? 0)}%`;
+  if (/^\(?0{3}\)?[\s-]?0{3}-?0{4}$/.test(fmt) && Number.isInteger(value) && String(value).length === 10) {
+    const d = String(value);
+    return fmt.includes("(")
+      ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+      : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  }
+  const grouping = fmt.includes("#,##0") || fmt.includes("#,###");
+  if (decimals !== undefined || grouping) {
+    return value.toLocaleString("en-US", {
+      minimumFractionDigits: decimals ?? 0,
+      maximumFractionDigits: decimals ?? 0,
+      useGrouping: grouping,
+    });
+  }
   return String(value);
 }
 
-function escapeMarkdownCell(value: unknown): string {
-  return cellText(value).trim().replace(/\|/g, "\\|").replace(/\s+/g, " ");
+// ExcelJS cell values aren't always plain strings/numbers — rich text,
+// formulas, hyperlinks and dates all come back as distinct shapes.
+function valueText(value: unknown, numFmt?: string): string {
+  if (value == null) return "";
+  if (value instanceof Date) {
+    // Spreadsheet dates are stored without a time zone; read them as UTC so
+    // the date doesn't shift by a day depending on the server's location.
+    const date = value.toLocaleDateString("en-US", { timeZone: "UTC" });
+    const timed = /h{1,2}:mm|AM\/PM/i.test(numFmt ?? "");
+    return timed
+      ? `${date} ${value.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit" })}`
+      : date;
+  }
+  if (typeof value === "number") return formatNumber(value, numFmt);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value !== "object") return String(value);
+
+  const v = value as {
+    richText?: { text: string }[];
+    text?: unknown;
+    result?: unknown;
+    hyperlink?: string;
+    error?: string;
+  };
+  if (v.error) return "";
+  if (Array.isArray(v.richText)) return v.richText.map((r) => r.text).join("");
+  if (typeof v.result !== "undefined") return valueText(v.result, numFmt);
+  // Hyperlink cells nest their display text as { text: <richText object>,
+  // hyperlink: "..." } rather than a plain string — recurse rather than
+  // assuming .text is already a string.
+  if (typeof v.text !== "undefined") return valueText(v.text, numFmt);
+  return String(value);
+}
+
+function escapeMarkdownCell(text: string): string {
+  return text.trim().replace(/\|/g, "\\|").replace(/\s+/g, " ");
+}
+
+// One worksheet as a clean grid of strings: merged cells appear once (ExcelJS
+// otherwise repeats a merged title in every column it spans), hidden rows and
+// columns are skipped, and columns that are empty throughout are dropped.
+function sheetToGrid(sheet: ExcelJS.Worksheet): string[][] {
+  let maxCol = 0;
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    maxCol = Math.max(maxCol, row.cellCount);
+  });
+  maxCol = Math.min(maxCol, MAX_COLUMNS);
+  const hiddenCol = Array.from({ length: maxCol + 1 }, (_, c) => (c > 0 ? Boolean(sheet.getColumn(c).hidden) : false));
+
+  const rows: string[][] = [];
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    if (row.hidden) return;
+    const cells: string[] = [];
+    for (let c = 1; c <= maxCol; c++) {
+      if (hiddenCol[c]) continue;
+      const cell = row.getCell(c);
+      if (cell.isMerged && cell.master && cell.master.address !== cell.address) {
+        cells.push("");
+        continue;
+      }
+      cells.push(escapeMarkdownCell(valueText(cell.value, cell.numFmt)));
+    }
+    if (cells.some(Boolean)) rows.push(cells);
+  });
+  if (rows.length === 0) return rows;
+
+  const keep = rows[0].map((_, i) => i).filter((i) => rows.some((r) => r[i]));
+  return rows.map((r) => keep.map((i) => r[i]));
+}
+
+// Title rows above the real table (a merged banner, a report name) are kept as
+// text; the first row with two or more filled cells is the table header.
+function splitTitles(grid: string[][]): { titles: string[]; header: string[] | null; body: string[][] } {
+  let start = 0;
+  const titles: string[] = [];
+  while (start < grid.length && start < 4 && grid[start].filter(Boolean).length <= 1) {
+    const text = grid[start].find(Boolean);
+    if (text) titles.push(text);
+    start++;
+  }
+  if (start >= grid.length) return { titles, header: null, body: [] };
+  return { titles, header: grid[start], body: grid.slice(start + 1) };
+}
+
+function markdownTable(header: string[], rows: string[][]): string {
+  const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
+  return [line(header), line(header.map(() => "---")), ...rows.map(line)].join("\n");
+}
+
+function isVisible(sheet: ExcelJS.Worksheet): boolean {
+  return sheet.state === "visible" || sheet.state === undefined;
+}
+
+async function loadWorkbook(buffer: Buffer): Promise<ExcelJS.Workbook> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+  return workbook;
 }
 
 // Spreadsheet import: one page per worksheet, rendered as a Markdown table —
-// this is exactly the shape POTS Lines' facility sheets used (Department |
-// Number columns), transcribed by hand before this importer existed.
+// long sheets are split into pages of ROWS_PER_PAGE rows (each repeating the
+// header) because one enormous table is unusable on a phone.
 async function parseXlsxAsSection(buffer: Buffer, filename: string): Promise<SectionDraft> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-
+  const workbook = await loadWorkbook(buffer);
+  const notes: string[] = [];
   const pages: DraftPage[] = [];
-  workbook.eachSheet((sheet) => {
-    const rows: string[][] = [];
-    sheet.eachRow((row) => {
-      const cells: string[] = [];
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        cells.push(escapeMarkdownCell(cell.value));
-      });
-      if (cells.some((c) => c)) rows.push(cells);
-    });
-    if (rows.length === 0) return;
 
-    const header = rows[0];
-    const sep = header.map(() => "---");
-    const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
-    const markdown = [line(header), line(sep), ...rows.slice(1).map(line)].join("\n");
-    pages.push({ title: sheet.name, body: markdown });
+  workbook.eachSheet((sheet) => {
+    if (!isVisible(sheet)) return;
+    const grid = sheetToGrid(sheet);
+    if (grid.length === 0) return;
+    const { titles, header, body } = splitTitles(grid);
+    const titleText = titles.join("\n\n");
+
+    if (!header) {
+      pages.push({ title: sheet.name, body: titles.join("\n\n") });
+      return;
+    }
+
+    let rows = body;
+    if (rows.length > MAX_ROWS_PER_SHEET) {
+      notes.push(`"${sheet.name}" has ${rows.length.toLocaleString("en-US")} rows; only the first ${MAX_ROWS_PER_SHEET.toLocaleString("en-US")} were imported.`);
+      rows = rows.slice(0, MAX_ROWS_PER_SHEET);
+    }
+    const chunks: string[][][] = [];
+    for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) chunks.push(rows.slice(i, i + ROWS_PER_PAGE));
+    if (chunks.length === 0) chunks.push([]);
+    if (chunks.length > 1) {
+      notes.push(`"${sheet.name}" has ${rows.length.toLocaleString("en-US")} rows, so it was split into ${chunks.length} pages of up to ${ROWS_PER_PAGE} rows.`);
+    }
+
+    chunks.forEach((chunk, i) => {
+      pages.push({
+        title: chunks.length > 1 ? `${sheet.name} (part ${i + 1} of ${chunks.length})` : sheet.name,
+        body: `${i === 0 && titleText ? `${titleText}\n\n` : ""}${markdownTable(header, chunk)}`,
+      });
+    });
   });
 
-  return { title: fallbackTitle(filename), pages };
+  if (pages.length === 0) throw new UserFacingImportError("That spreadsheet has no data to import.");
+  if (pages.length > MAX_PAGES) {
+    notes.push(`The workbook produced ${pages.length} pages; only the first ${MAX_PAGES} were kept.`);
+    pages.length = MAX_PAGES;
+  }
+  return { title: fallbackTitle(filename), pages, notes };
 }
 
-// Spreadsheet-as-checklist: every non-empty row becomes one item, joining
-// its cells with " — " (no table/bold semantics exist in a spreadsheet to
-// detect phases or a dedicated action column the way the .docx path does).
+// Spreadsheet-as-checklist: every data row becomes one item, joining its
+// cells with " — " (a spreadsheet has no bold/table semantics to detect
+// phases the way the .docx path does, so titles and sheet names stand in).
 async function parseXlsxAsChecklist(buffer: Buffer, filename: string): Promise<ChecklistDraft> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-
+  const workbook = await loadWorkbook(buffer);
+  const notes: string[] = [];
   const items: string[] = [];
-  workbook.eachSheet((sheet) => {
-    sheet.eachRow((row) => {
-      const cells: string[] = [];
-      row.eachCell({ includeEmpty: false }, (cell) => {
-        const text = escapeMarkdownCell(cell.value);
-        if (text) cells.push(text);
-      });
-      if (cells.length > 0) items.push(cells.join(" — "));
-    });
-  });
+  const sheets = workbook.worksheets.filter(isVisible);
 
-  return { title: fallbackTitle(filename), items };
+  for (const sheet of sheets) {
+    const grid = sheetToGrid(sheet);
+    if (grid.length === 0) continue;
+    const { titles, header, body } = splitTitles(grid);
+    if (sheets.length > 1) items.push(`PHASE: ${sheet.name}`);
+    for (const t of titles) items.push(`PHASE: ${t}`);
+    if (!header) continue;
+    // A one-row table has no separate header — treat that row as data.
+    const rows = body.length === 0 ? [header] : body;
+    for (const row of rows) {
+      const text = row.filter(Boolean).join(" — ");
+      if (text) items.push(text);
+    }
+  }
+
+  if (items.length === 0) throw new UserFacingImportError("That spreadsheet has no data to import.");
+  if (items.length > MAX_CHECKLIST_ITEMS) {
+    notes.push(`The spreadsheet has ${items.length.toLocaleString("en-US")} rows; only the first ${MAX_CHECKLIST_ITEMS} were imported as checklist items.`);
+    items.length = MAX_CHECKLIST_ITEMS;
+  }
+  return { title: fallbackTitle(filename), items, notes };
 }
 
-// PDF import: plain text extraction only — PDFs don't carry the same
-// semantic structure (bold/tables/headings) .docx does via mammoth, so this
-// is the lowest-fidelity path of the three formats. Blank-line-separated
-// blocks become paragraphs for section import, or one item per non-empty
-// line for checklist import; expect more manual cleanup in the review step
-// than with a Word document.
-async function pdfToText(buffer: Buffer): Promise<string> {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+// ---------------------------------------------------------------------------
+// PDF
+// ---------------------------------------------------------------------------
+//
+// A PDF carries no real headings, lists or tables — only text placed at
+// positions — so pdf-text.ts infers them from the layout. It is the
+// lowest-fidelity path of the three formats, and the admin is told so.
+
+const PDF_NOTE =
+  "This text was rebuilt from the PDF's page layout, so check the headings, lists and tables before publishing.";
+
+async function loadPdfBlocks(buffer: Buffer): Promise<PdfBlock[]> {
   try {
-    const result = await parser.getText();
-    return result.text;
-  } finally {
-    await parser.destroy();
+    return await extractPdfBlocks(buffer);
+  } catch (err) {
+    if (err instanceof Error && err.name === "NoPdfTextError") {
+      throw new UserFacingImportError(
+        "This PDF has no selectable text — it looks like a scan or a drawing. Export a text version from the original document, or upload a Word or Excel file instead."
+      );
+    }
+    throw err;
   }
 }
 
 async function parsePdfAsSection(buffer: Buffer, filename: string): Promise<SectionDraft> {
-  const text = await pdfToText(buffer);
-  const paragraphs = text
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const body = paragraphs.join("\n\n");
-  return { title: fallbackTitle(filename), pages: [{ title: "Page 1", body }] };
+  const blocks = await loadPdfBlocks(buffer);
+
+  // Split into pages at the top-level headings, when there are at least two.
+  const headingLevels = blocks.flatMap((b) => (b.type === "heading" ? [b.level] : []));
+  const top = headingLevels.length ? Math.min(...headingLevels) : 0;
+  const starts = blocks.flatMap((b, i) => (b.type === "heading" && b.level === top ? [i] : []));
+
+  if (starts.length < 2) {
+    return { title: fallbackTitle(filename), pages: [{ title: "Page 1", body: blocksToMarkdown(blocks) }], notes: [PDF_NOTE] };
+  }
+
+  const pages: DraftPage[] = [];
+  const before = blocks.slice(0, starts[0]);
+  if (before.length > 0) pages.push({ title: "Overview", body: blocksToMarkdown(before) });
+  starts.forEach((start, k) => {
+    const heading = blocks[start] as Extract<PdfBlock, { type: "heading" }>;
+    pages.push({ title: heading.text, body: blocksToMarkdown(blocks.slice(start + 1, starts[k + 1] ?? blocks.length)) });
+  });
+  return { title: fallbackTitle(filename), pages, notes: [PDF_NOTE] };
 }
 
 async function parsePdfAsChecklist(buffer: Buffer, filename: string): Promise<ChecklistDraft> {
-  const text = await pdfToText(buffer);
-  // Splitting on every line break (rather than blank-line-separated
-  // paragraphs, as the section path does) would turn each wrapped line of
-  // running prose into its own "item" — fine for a genuinely list-shaped
-  // PDF (one short line per action), but produces thousands of
-  // near-meaningless fragments out of a multi-page prose document. This is
-  // the same tradeoff either way without knowing the PDF's shape in
-  // advance; paragraph-level splitting degrades far more gracefully.
-  const items = text
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  return { title: fallbackTitle(filename), items };
+  const blocks = await loadPdfBlocks(buffer);
+  const items: string[] = [];
+  for (const b of blocks) {
+    if (b.type === "heading") items.push(`PHASE: ${b.text}`);
+    else if (b.type === "paragraph") items.push(b.text);
+    else if (b.type === "list") items.push(...b.items);
+    else {
+      // The first row of a real table is its header, not an action.
+      const rows = b.rows.length >= 3 ? b.rows.slice(1) : b.rows;
+      for (const row of rows) {
+        const text = row.filter(Boolean).join(" — ");
+        if (text) items.push(text);
+      }
+    }
+  }
+  return { title: fallbackTitle(filename), items, notes: [PDF_NOTE] };
 }
 
 export type SupportedExt = "docx" | "xlsx" | "pdf";

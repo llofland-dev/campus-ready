@@ -7,8 +7,8 @@ import type { Checklist, PlanSection } from "@/lib/supabase/types";
 import { PALETTE } from "@/lib/palette";
 import { CATEGORIES } from "@/lib/categories";
 
-type SectionDraft = { title: string; pages: { title: string; body: string }[] };
-type ChecklistDraft = { title: string; items: string[] };
+type SectionDraft = { title: string; pages: { title: string; body: string }[]; notes?: string[] };
+type ChecklistDraft = { title: string; items: string[]; notes?: string[] };
 
 const fieldClass =
   "w-full rounded-md border border-black/10 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30";
@@ -58,8 +58,17 @@ export function ImportForm({
     formData.append("file", file);
     formData.append("targetType", targetType);
 
-    const res = await fetch("/api/admin/import-document", { method: "POST", body: formData });
-    const body = await res.json();
+    let res: Response;
+    let body: { error?: string; draft?: unknown };
+    try {
+      res = await fetch("/api/admin/import-document", { method: "POST", body: formData });
+      // Not always JSON: a proxy rejecting an oversized upload answers with plain text.
+      body = await res.json().catch(() => ({}));
+    } catch {
+      setUploading(false);
+      setError("Couldn't reach the server. Check your connection and try again.");
+      return;
+    }
     setUploading(false);
 
     if (!res.ok) {
@@ -229,6 +238,7 @@ export function ImportForm({
           <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
             Review before publishing — nothing is live yet
           </h3>
+          <DraftNotes notes={sectionDraft.notes} />
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Add these page(s) to</label>
@@ -353,6 +363,7 @@ export function ImportForm({
           <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
             Review before publishing — nothing is live yet
           </h3>
+          <DraftNotes notes={checklistDraft.notes} />
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Checklist title</label>
@@ -442,5 +453,19 @@ export function ImportForm({
         </div>
       )}
     </div>
+  );
+}
+
+// Plain-language heads-up from the importer about anything left out or
+// approximated (pictures skipped, a long sheet split into pages, a PDF whose
+// layout was reconstructed) — shown so the admin checks those spots.
+function DraftNotes({ notes }: { notes?: string[] }) {
+  if (!notes || notes.length === 0) return null;
+  return (
+    <ul className="list-disc space-y-1 rounded-md border border-amber-300 bg-amber-50 py-3 pl-7 pr-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+      {notes.map((note) => (
+        <li key={note}>{note}</li>
+      ))}
+    </ul>
   );
 }

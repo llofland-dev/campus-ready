@@ -38,11 +38,23 @@ const components: Components = {
 // Turns a bare phone number (e.g. in a POTS-lines table cell) into a
 // tap-to-dial markdown link before parsing — page bodies are authored as
 // plain Markdown with no way to add tel: links by hand, so this makes every
-// NANP-formatted number in any page body dialable automatically.
-const PHONE_PATTERN = /\b(\d{3})-(\d{3})-(\d{4})\b/g;
+// NANP-formatted number in any page body dialable automatically. Handles the
+// ways people actually write them: 301-670-8702, (301) 670-8702, 301 670-8702,
+// 301.670.8702. Imported Word/PDF text uses all of these.
+//
+// No lookbehind here on purpose: this module can end up in a browser bundle,
+// and older iPhones (before Safari 16.4) can't parse a regex with lookbehind.
+// The character before the number is captured and put back instead.
+const PHONE_PATTERN = /(^|\D)(\(\d{3}\)|\d{3})[\s.-]?(\d{3})[\s.-](\d{4})(?!\d)/g;
 
 function linkifyPhones(text: string): string {
-  return text.replace(PHONE_PATTERN, (match, area, exchange, line) => `[${match}](tel:${area}${exchange}${line})`);
+  return text.replace(
+    PHONE_PATTERN,
+    (_match, before: string, area: string, exchange: string, line: string) => {
+      const shown = _match.slice(before.length);
+      return `${before}[${shown}](tel:${area.replace(/\D/g, "")}${exchange}${line})`;
+    }
+  );
 }
 
 export function Markdown({ children }: { children: string }) {

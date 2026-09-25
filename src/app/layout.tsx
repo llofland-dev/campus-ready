@@ -29,6 +29,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#00274c",
+  // Lets the page extend under the notch / status bar so the safe-area
+  // insets (see .safe-top-* in globals.css) are reported and can be honored.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

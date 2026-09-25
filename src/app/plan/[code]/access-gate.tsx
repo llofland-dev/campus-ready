@@ -30,11 +30,22 @@ export function AccessGate({
     setError(null);
     setSubmitting(true);
 
-    const res = await fetch("/api/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, password }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, password }),
+      });
+    } catch {
+      // Offline or the connection dropped: fetch rejects rather than
+      // returning a response, and the button would stay on "Checking..." for good.
+      setSubmitting(false);
+      setError(
+        "You're offline. Signing in needs a connection — plans you've already opened on this device stay available without one."
+      );
+      return;
+    }
 
     setSubmitting(false);
 
@@ -49,7 +60,7 @@ export function AccessGate({
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black">
-      <header className={`${BRAND.header} px-4 py-5 text-white`}>
+      <header className={`${BRAND.header} safe-top-5 px-4 py-5 text-white`}>
         <div className="mx-auto flex max-w-sm items-center gap-2">
           {logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke": "node --env-file=.env.local scripts/smoke/run.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
@@ -14,14 +15,14 @@
     "cheerio": "^1.2.0",
     "exceljs": "^4.4.0",
     "mammoth": "^1.12.1",
-    "next": "16.3.1",
-    "pdf-parse": "^2.4.5",
+    "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
-    "turndown": "^7.2.4"
+    "turndown": "^7.2.4",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -30,7 +31,8 @@
     "@types/react-dom": "^19",
     "@types/turndown": "^5.0.6",
     "eslint": "^9",
-    "eslint-config-next": "16.3.1",
+    "eslint-config-next": "16.3.6",
+    "jszip": "^3.10.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

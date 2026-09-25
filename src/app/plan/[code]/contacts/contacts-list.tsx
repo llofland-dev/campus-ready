@@ -37,11 +37,19 @@ export function ContactsList({ contacts, canEdit = false }: { contacts: Contact[
     setSaving(true);
     setError(null);
 
-    const res = await fetch("/api/staff-update-contact", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactId, phone: draft.phone, email: draft.email }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/staff-update-contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactId, phone: draft.phone, email: draft.email }),
+      });
+    } catch {
+      // Offline or the connection dropped — without this the form stays stuck on "Saving".
+      setSaving(false);
+      setError("You're offline — reconnect to save this change.");
+      return;
+    }
 
     setSaving(false);
 

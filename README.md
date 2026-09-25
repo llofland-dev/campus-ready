@@ -18,10 +18,10 @@ checklists — gated behind a plan code and optional password, and readable offl
 
 ## Two logins, on purpose
 
-- **Admin** (`/admin`): the org's content editors. Real Supabase Auth accounts. The first user
-  for a new org signs up at `/admin/signup`, which creates both their account and their
-  organization together (`eop_create_org_for_self` RPC) — there's no pre-existing admin to
-  assign a fresh signup to.
+- **Admin** (`/admin`): the org's content editors. Real Supabase Auth accounts. Self-service
+  sign-up is closed (`/admin/signup` redirects to sign-in): the developer creates the first
+  admin's login in Supabase, and on first sign-in that admin sets up the organization
+  (`eop_create_org_for_self` RPC). See `docs/CUSTOMER_ONBOARDING.md`.
 - **Field staff** (`/`): no account. They enter the org's plan code (and password, if the org
   set one) and get a signed, httpOnly session cookie scoped to that org — see
   `src/lib/eop-session.ts` and `src/lib/eop-org.ts`. All public content reads go through a

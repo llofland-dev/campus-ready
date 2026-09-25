@@ -18,7 +18,7 @@ export default function CodeEntryPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-black">
-      <header className={`${BRAND.header} px-4 py-5 text-white`}>
+      <header className={`${BRAND.header} safe-top-5 px-4 py-5 text-white`}>
         <div className="mx-auto flex max-w-sm items-center gap-2">
           <button
             type="button"

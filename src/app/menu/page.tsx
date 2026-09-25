@@ -5,7 +5,7 @@ import { BRAND } from "@/lib/palette";
 export default function MenuPage() {
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-black">
-      <header className={`${BRAND.header} px-4 py-5 text-white`}>
+      <header className={`${BRAND.header} safe-top-5 px-4 py-5 text-white`}>
         <h1 className="mx-auto max-w-sm text-xl font-semibold">Campus Ready</h1>
       </header>
 

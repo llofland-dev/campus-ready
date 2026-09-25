@@ -14,7 +14,7 @@ export function PlanHeader({
   logoUrl?: string | null;
 }) {
   return (
-    <header className={`${color} px-4 py-4 text-white shadow-sm`}>
+    <header className={`${color} safe-top-4 px-4 py-4 text-white shadow-sm`}>
       <div className="mx-auto flex max-w-lg items-center gap-2">
         {backHref && (
           <Link href={backHref} aria-label="Back" className="-ml-1 shrink-0 rounded-full p-1 hover:bg-white/10">

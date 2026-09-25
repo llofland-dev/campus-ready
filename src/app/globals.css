@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* On notched phones — and inside the iOS/Android app shells — the page is
+   drawn under the status bar (viewport-fit=cover, see layout.tsx). Full-bleed
+   headers add the top safe-area inset to their normal padding so their
+   content clears it. env() resolves to 0 in ordinary browsers, so nothing
+   changes there. Unlayered on purpose: it must beat Tailwind's py-* utilities. */
+.safe-top-4 {
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+}
+.safe-top-5 {
+  padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
+}

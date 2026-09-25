@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Organization } from "@/lib/supabase/types";
 
+const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const MAX_LOGO_BYTES = 1024 * 1024;
+const MIN_STAFF_PASSWORD_LENGTH = 6;
+const MIN_ADMIN_PASSPHRASE_LENGTH = 8;
+
 export function OrgSettingsPanel({ org }: { org: Organization }) {
   const router = useRouter();
   const supabase = createClient();
@@ -39,10 +44,15 @@ export function OrgSettingsPanel({ org }: { org: Organization }) {
 
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setNameError("Enter an organization name.");
+      return;
+    }
     setSavingName(true);
     setNameError(null);
 
-    const { error } = await supabase.from("organizations").update({ name }).eq("id", org.id);
+    const { error } = await supabase.from("organizations").update({ name: trimmedName }).eq("id", org.id);
 
     setSavingName(false);
 
@@ -59,10 +69,21 @@ export function OrgSettingsPanel({ org }: { org: Organization }) {
     e.target.value = "";
     if (!file) return;
 
+    // The logo loads on every staff screen, often over cellular — an
+    // unbounded upload would slow the whole app down for everyone.
+    if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+      setLogoError("Use a PNG, JPEG, or WebP image.");
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError("That image is too large — keep it under 1 MB.");
+      return;
+    }
+
     setUploadingLogo(true);
     setLogoError(null);
 
-    const ext = file.name.split(".").pop() || "png";
+    const ext = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
     // A unique filename per upload (rather than a fixed name + overwrite)
     // means the public URL changes whenever the logo changes, so every
     // screen picks up the new image immediately instead of serving a
@@ -88,6 +109,11 @@ export function OrgSettingsPanel({ org }: { org: Organization }) {
 
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault();
+    if (password && password.length < MIN_STAFF_PASSWORD_LENGTH) {
+      setPasswordMessage(null);
+      setPasswordError(`Use at least ${MIN_STAFF_PASSWORD_LENGTH} characters.`);
+      return;
+    }
     setSavingPassword(true);
     setPasswordError(null);
     setPasswordMessage(null);
@@ -107,6 +133,14 @@ export function OrgSettingsPanel({ org }: { org: Organization }) {
 
   async function handleSetAdminPassword(e: React.FormEvent) {
     e.preventDefault();
+    // This passphrase unlocks command-level content and contact editing with
+    // no login behind it, and anyone who knows the plan code can guess at it —
+    // so it has to clear a higher bar than the staff password.
+    if (adminPassword && adminPassword.length < MIN_ADMIN_PASSPHRASE_LENGTH) {
+      setAdminPasswordMessage(null);
+      setAdminPasswordError(`Use at least ${MIN_ADMIN_PASSPHRASE_LENGTH} characters.`);
+      return;
+    }
     setSavingAdminPassword(true);
     setAdminPasswordError(null);
     setAdminPasswordMessage(null);
@@ -224,7 +258,7 @@ export function OrgSettingsPanel({ org }: { org: Organization }) {
             {uploadingLogo ? "Uploading..." : currentLogoUrl ? "Replace logo" : "Upload logo"}
             <input
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp"
               onChange={handleLogoChange}
               disabled={uploadingLogo}
               className="hidden"
@@ -271,7 +305,7 @@ export function OrgSettingsPanel({ org }: { org: Organization }) {
         <p className="mb-3 text-sm text-zinc-500">
           A separate, elevated passphrase for whoever you designate as your facility&apos;s on-the-ground
           admin (e.g. your Emergency Manager). Entering it at the plan code screen unlocks Incident
-          Command/Job Action Sheet content and the ability to update contact phone numbers and
+          Management/Job Action Sheet content and the ability to update contact phone numbers and
           emails — nothing else. No account or login required, same as the staff password above.
         </p>
         <form onSubmit={handleSetAdminPassword} className="flex flex-wrap items-end gap-3">

@@ -99,10 +99,20 @@ export function PlanEditor({
       e.target.value = "";
       if (!file) return;
 
+      // Icons load on every staff screen, often over cellular — keep them small.
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+        setError("Use a PNG, JPEG, or WebP image for section icons.");
+        return;
+      }
+      if (file.size > 1024 * 1024) {
+        setError("That image is too large — keep section icons under 1 MB.");
+        return;
+      }
+
       setUploadingIconId(section.id);
       setError(null);
 
-      const ext = file.name.split(".").pop() || "png";
+      const ext = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
       // Unique filename per upload so the public URL changes and no screen
       // serves a browser-cached copy of the old icon at the same URL.
       const path = `${orgId}/${section.id}/icon-${Date.now()}.${ext}`;
@@ -256,7 +266,7 @@ export function PlanEditor({
                           : "Upload icon"}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp"
                         onChange={handleIconChange(section)}
                         disabled={uploadingIconId === section.id}
                         className="hidden"

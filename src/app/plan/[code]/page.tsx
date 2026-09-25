@@ -7,6 +7,7 @@ import { PALETTE } from "@/lib/palette";
 import { AlertIcon, ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
 import { PlanHeader } from "./plan-header";
 import { AccessGate } from "./access-gate";
+import { PlanAccess } from "./plan-access";
 
 export default async function PlanHubPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -72,6 +73,10 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
         .limit(1)
         .maybeSingle<IncidentUpdate>()
     : { data: null };
+
+  // Only offer "unlock admin access" to a User-level visitor of an org that
+  // actually has an admin passphrase; anything unexpected here just hides it.
+  const canUnlock = org.tier !== "admin" && (await lookupOrgByCode(code))?.has_admin_password === true;
 
   const byKey = new Map(PALETTE.map((c) => [c.key, c]));
   // "ics" is handled below as the merged Incident Management tile instead
@@ -180,6 +185,8 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
             );
           })}
         </div>
+
+        <PlanAccess code={code} tier={org.tier} canUnlock={canUnlock} />
       </div>
     </div>
   );
