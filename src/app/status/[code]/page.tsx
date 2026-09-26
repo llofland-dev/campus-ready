@@ -3,6 +3,7 @@ import { lookupOrgByCode } from "@/lib/eop-org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { Markdown } from "@/components/markdown";
+import { ClientTime } from "@/components/client-time";
 import { AlertIcon, ClipboardIcon, ChevronRightIcon } from "@/components/icons";
 import { AutoRefresh } from "./auto-refresh";
 import { BackButton } from "./back-button";
@@ -93,7 +94,9 @@ export default async function StatusPage({ params }: { params: Promise<{ code: s
                 <ul className="space-y-3">
                   {updates.map((u) => (
                     <li key={u.id} className="text-sm">
-                      <p className="text-xs text-zinc-500">{new Date(u.created_at).toLocaleString()}</p>
+                      <p className="text-xs text-zinc-500">
+                        <ClientTime iso={u.created_at} />
+                      </p>
                       <p className="text-zinc-900 dark:text-zinc-50">{u.message}</p>
                     </li>
                   ))}

@@ -344,11 +344,28 @@ async function run() {
     check("imported checklist opens with every item as a checkbox", cp.status === 200 && count(cp.html, /type="checkbox"/g) >= dChk.draft.items.length, `${count(cp.html, /type="checkbox"/g)} boxes`);
   }
 
+  // Times must reach the browser as labelled UTC text (<ClientTime>) and be converted THERE. Formatted
+  // on the server (Vercel runs in UTC) they showed families the wrong hour — a parent in New York saw
+  // an update posted at 2:43 PM stamped 6:43 PM — and rendered inside a client component they also
+  // broke hydration (React error #418). Both were invisible to an HTTP-only test until we looked for
+  // the server-formatted pattern, so look for it.
+  group("7. Times are shown in the viewer's own timezone");
+  const incident = await svc.from("incidents").insert({ org_id: fx.orgId, name: "ZZ smoke incident" }).select("id").single();
+  await svc.from("incident_updates").insert({ org_id: fx.orgId, incident_id: incident.data?.id, message: "ZZ smoke update" });
+  const serverFormattedTime = /\d{1,2}\/\d{1,2}\/\d{4},? \d{1,2}:\d{2}(:\d{2})?\s?[AP]M/;
+  const labelledUtcTime = /<time[^>]*>[^<]*UTC<\/time>/;
+  const familyPage = await visitor.page(`/status/${fx.code}`);
+  check("parent status page sends its times as labelled UTC", familyPage.status === 200 && labelledUtcTime.test(familyPage.html), `HTTP ${familyPage.status}`);
+  check("parent status page has no server-formatted (wrong-timezone) time", !serverFormattedTime.test(familyPage.html), (familyPage.html.match(serverFormattedTime) ?? [""])[0]);
+  const incidentReport = await admin.page(`/admin/incidents/${incident.data?.id}`);
+  check("admin incident report sends its times as labelled UTC", incidentReport.status === 200 && labelledUtcTime.test(incidentReport.html), `HTTP ${incidentReport.status}`);
+  check("admin incident report has no server-formatted (wrong-timezone) time", !serverFormattedTime.test(incidentReport.html), (incidentReport.html.match(serverFormattedTime) ?? [""])[0]);
+
   // Password reset depends on settings that live in the Supabase dashboard, not in this code, so a
   // wrong value there breaks it silently: reset emails once sent people to http://localhost:3000
   // because the Site URL was never changed and no production address was on the allow-list. This
   // group asks Supabase (no email is sent) and follows a reset token end to end.
-  group("7. Password reset and Supabase redirect settings");
+  group("8. Password reset and Supabase redirect settings");
   const resetPage = await visitor.page("/admin/reset-password?token_hash=smoke&type=recovery");
   check("reset-password page loads for a token link", resetPage.status === 200 && resetPage.html.includes("Set a new password"), `HTTP ${resetPage.status}`);
   check("forgot-password page loads", (await visitor.page("/admin/forgot-password")).status === 200);
@@ -392,7 +409,7 @@ async function run() {
   check("the login signs in with the new password", !signedInAgain.error, signedInAgain.error?.message ?? "");
 
   if (CHECK_LOGS) {
-    group("8. Vercel server log");
+    group("9. Vercel server log");
     const minutes = Math.ceil((Date.now() - startedAt) / 60000) + 1;
     try {
       const out = execSync(`npx --yes vercel@59.14.0 logs --status-code 500 --since ${minutes}m -n 20`, { encoding: "utf8", timeout: 120000, stdio: ["ignore", "pipe", "pipe"] });

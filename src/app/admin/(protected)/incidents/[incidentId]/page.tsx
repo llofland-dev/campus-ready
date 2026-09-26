@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ChecklistEvent, Contact, Incident, IncidentUpdate, Profile } from "@/lib/supabase/types";
 import { MailIncidentReport } from "@/components/mail-incident-report";
+import { ClientTime } from "@/components/client-time";
 
 export default async function IncidentDetailPage({
   params,
@@ -72,8 +73,15 @@ export default async function IncidentDetailPage({
         </Link>
         <h2 className="mt-1 text-lg font-semibold text-black dark:text-zinc-50">{incident.name}</h2>
         <p className="text-sm text-zinc-500">
-          {new Date(incident.started_at).toLocaleString()}
-          {incident.closed_at ? ` – ${new Date(incident.closed_at).toLocaleString()}` : " (active)"}
+          <ClientTime iso={incident.started_at} />
+          {incident.closed_at ? (
+            <>
+              {" – "}
+              <ClientTime iso={incident.closed_at} />
+            </>
+          ) : (
+            " (active)"
+          )}
         </p>
       </div>
 
@@ -98,7 +106,9 @@ export default async function IncidentDetailPage({
           <ul className="space-y-2">
             {updates.map((u) => (
               <li key={u.id} className="text-sm">
-                <span className="text-zinc-400">{new Date(u.created_at).toLocaleString()}</span>{" "}
+                <span className="text-zinc-400">
+                  <ClientTime iso={u.created_at} />
+                </span>{" "}
                 <span className="text-black dark:text-zinc-50">{u.message}</span>
               </li>
             ))}
@@ -114,7 +124,9 @@ export default async function IncidentDetailPage({
           <ol className="space-y-3">
             {events.map((event) => (
               <li key={event.id} className="text-sm">
-                <span className="text-zinc-400">{new Date(event.created_at).toLocaleTimeString()}</span>{" "}
+                <span className="text-zinc-400">
+                  <ClientTime iso={event.created_at} timeOnly />
+                </span>{" "}
                 <span className={event.action === "checked" ? "text-black dark:text-zinc-50" : "text-zinc-400 line-through"}>
                   {event.item_text}
                 </span>

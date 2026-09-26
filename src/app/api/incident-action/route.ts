@@ -29,7 +29,9 @@ export async function POST(request: Request) {
   if (action === "start") {
     const { error } = await admin.from("incidents").insert({
       org_id: session.orgId,
-      name: name?.trim() || `Incident – ${new Date().toLocaleString()}`,
+      // Fallback only: the staff app sends its own name, in the admin's timezone. This server runs
+      // in UTC, so say so instead of printing a time that looks local but isn't.
+      name: name?.trim() || `Incident – ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });

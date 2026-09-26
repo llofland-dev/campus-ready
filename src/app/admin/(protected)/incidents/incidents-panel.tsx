@@ -7,16 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { MailIncidentReport } from "@/components/mail-incident-report";
 import { useClientValue } from "@/lib/use-client-value";
-
-// `toLocaleString()` depends on the runtime's locale/timezone, which can
-// differ between this server-rendered pass (Node) and the browser that
-// hydrates it — a real, if latent, hydration-mismatch risk in a client
-// component. `useClientValue` renders nothing until the browser takes over:
-// server and the first client render both produce the same (empty) markup.
-function ClientTime({ iso }: { iso: string }) {
-  const text = useClientValue(() => new Date(iso).toLocaleString(), "");
-  return <>{text}</>;
-}
+import { ClientTime } from "@/components/client-time";
 
 function StatusLink({ orgCode }: { orgCode: string }) {
   const [copied, setCopied] = useState(false);

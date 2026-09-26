@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { MailIncidentReport } from "@/components/mail-incident-report";
 import { useClientValue } from "@/lib/use-client-value";
+import { ClientTime } from "@/components/client-time";
 
 async function callAction(body: Record<string, unknown>) {
   const res = await fetch("/api/incident-action", {
@@ -43,7 +44,9 @@ export function IncidentManagementPanel({
     setBusy(true);
     setError(null);
     try {
-      await callAction({ action: "start", name: name.trim() });
+      // The default name carries a time, so build it HERE in the admin's own timezone — the server
+      // runs in UTC and would stamp a New York school's incident with a time 4-5 hours off.
+      await callAction({ action: "start", name: name.trim() || `Incident – ${new Date().toLocaleString()}` });
       setName("");
       router.refresh();
     } catch (err) {
@@ -133,7 +136,9 @@ export function IncidentManagementPanel({
               <ul className="mt-4 space-y-2">
                 {updates.map((u) => (
                   <li key={u.id} className="rounded-md border border-black/10 bg-zinc-50 p-2 text-sm dark:border-white/10 dark:bg-zinc-900">
-                    <p className="text-zinc-500">{new Date(u.created_at).toLocaleString()}</p>
+                    <p className="text-zinc-500">
+                      <ClientTime iso={u.created_at} />
+                    </p>
                     <p className="text-black dark:text-zinc-50">{u.message}</p>
                   </li>
                 ))}

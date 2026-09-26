@@ -38,16 +38,20 @@ Options (after `--`):
    with no text, the size limit, and the file-type check.
 5. **Rendering** — publishes the imported drafts and checks the pages staff would open (tables, lists,
    headings, tap-to-dial phone numbers, checkboxes).
-6. **Password reset and Supabase redirect settings** — these live in the Supabase dashboard, not in the
+6. **Times** — the parent status page and the admin incident report must send their times as labelled UTC
+   and let the browser convert them. Formatted on the server (Vercel runs in UTC) they showed families the
+   wrong hour (a New York parent saw 6:43 PM for an update posted at 2:43 PM) and logged a React hydration
+   error; an HTTP-only test could not see that until it looked for the server-formatted pattern.
+7. **Password reset and Supabase redirect settings** — these live in the Supabase dashboard, not in the
    code, so a wrong value breaks reset silently (it once sent people to `http://localhost:3000`). Asks
    Supabase (no email is sent) whether reset links may return to each production address, that a made-up
    address is refused (so the allow-list is real), and that the Site URL is a production address. Then
    follows one reset token end to end: redeem it, set a password, sign in, and confirm the same link is
    refused the second time. The address checks apply to production addresses only.
-7. **Vercel log** — asks Vercel for any HTTP 500 errors during the run (production only; skipped if the
+8. **Vercel log** — asks Vercel for any HTTP 500 errors during the run (production only; skipped if the
    Vercel CLI isn't signed in on this machine).
 
-If a check in group 6 fails on the redirect or Site URL, the message says what to change:
+If a check in group 7 fails on the redirect or Site URL, the message says what to change:
 Supabase → Authentication → URL Configuration. The production addresses it expects are listed in
 `PRODUCTION_ORIGINS` at the top of `scripts/smoke/run.mjs`; add a new custom domain there too.
 
