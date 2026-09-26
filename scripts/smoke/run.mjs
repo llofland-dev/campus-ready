@@ -468,9 +468,16 @@ async function run() {
   check("changing the staff password also ends admin sessions", adminAfter.html.includes("Enter the plan password"), "the old admin session still works");
 
   // Guess throttling — LAST, because it deliberately locks this client out of this throwaway school for 15 minutes.
+  // Earlier steps in this run already made a few wrong guesses for this school, so the limit can cut in before the
+  // tenth guess here — what matters is: never accepted, and stopped no later than the 10th wrong guess overall.
   const wrongCodes = [];
-  for (let i = 0; i < 10; i++) wrongCodes.push((await visitor.post("/api/verify", { code: fx.code, password: `wrong-guess-${i}` })).status);
-  check("wrong passwords are refused, not silently accepted", wrongCodes.every((c) => c === 401), wrongCodes.join(","));
+  for (let i = 0; i < 12; i++) {
+    const status = (await visitor.post("/api/verify", { code: fx.code, password: `wrong-guess-${i}` })).status;
+    wrongCodes.push(status);
+    if (status === 429) break;
+  }
+  const firstBlocked = wrongCodes.indexOf(429);
+  check("wrong passwords are refused (never accepted) and the limit cuts in within 10 wrong guesses", wrongCodes.every((c) => c === 401 || c === 429) && firstBlocked > 0 && firstBlocked <= 10, wrongCodes.join(","));
   const throttled = await visitor.post("/api/verify", { code: fx.code, password: "wrong-guess-11" });
   check("after 10 wrong guesses further attempts are stopped (HTTP 429 with Retry-After)", throttled.status === 429 && Number(throttled.headers.get("retry-after")) > 0, `HTTP ${throttled.status}`);
   const stillLocked = await visitor.post("/api/verify", { code: fx.code, password: newStaffPw });
