@@ -18,6 +18,9 @@ Self-service sign-up is closed: `/admin/signup` redirects to the sign-in page an
    choose the code for them by telling them what to enter.
 5. **They build the plan** (protocols, contacts, forms, checklists, reunification). Staff open it
    with the plan code.
+   **Set a staff password before sharing the plan code** (Admin → Overview; at least 8 characters) and a Facility Admin
+   passphrase (at least 10, long and unusual — not one word). Without a staff password anyone who knows the plan code can
+   read the plan and post form responses. Changing either later signs everyone out. See `docs/SECURITY.md`.
    **Ask them to write a page titled `Family Pick-Up Information`** (in the Reunification section). It is
    the "Picking up your child" text on the public family status page (`/status/<plan code>`). That page has
    **no login, so anything on it is public** — write it for parents (where to go, what to expect, what to

@@ -7,8 +7,8 @@ import type { Organization } from "@/lib/supabase/types";
 
 const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_LOGO_BYTES = 1024 * 1024;
-const MIN_STAFF_PASSWORD_LENGTH = 6;
-const MIN_ADMIN_PASSPHRASE_LENGTH = 8;
+const MIN_STAFF_PASSWORD_LENGTH = 8;
+const MIN_ADMIN_PASSPHRASE_LENGTH = 10;
 
 export function OrgSettingsPanel({ org }: { org: Organization }) {
   const router = useRouter();

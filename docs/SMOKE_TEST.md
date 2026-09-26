@@ -51,7 +51,14 @@ Options (after `--`):
    address is refused (so the allow-list is real), and that the Site URL is a production address. Then
    follows one reset token end to end: redeem it, set a password, sign in, and confirm the same link is
    refused the second time. The address checks apply to production addresses only.
-8. **Vercel log** — asks Vercel for any HTTP 500 errors during the run (production only; skipped if the
+8. **Security basics** — protections added after the security audit (see `docs/SECURITY.md`): the public key cannot call
+   the password check or look organizations up; an admin's browser cannot read password hashes; minimum password
+   lengths are enforced by the database; Facility Admin access lasts at most a day; changing a password signs out
+   existing sessions; ten wrong guesses are stopped with HTTP 429; and (production) HSTS, no-framing, `nosniff` and a
+   Content-Security-Policy are sent. Several depend on `supabase/migrations/20260927100000_security_hardening.sql`
+   having been run, so a missing migration fails here. The throttling check runs last because it deliberately locks the
+   test client out of its own throwaway school for 15 minutes.
+9. **Vercel log** — asks Vercel for any HTTP 500 errors during the run (production only; skipped if the
    Vercel CLI isn't signed in on this machine).
 
 If a check in group 7 fails on the redirect or Site URL, the message says what to change:

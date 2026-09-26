@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createSessionCookie } from "@/lib/eop-session";
-import { normalizeOrgCode } from "@/lib/eop-org";
+import { loadOrgState, lookupOrgByCode, normalizeOrgCode } from "@/lib/eop-org";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { jsonError, readJsonObject } from "@/lib/api-utils";
+import { clientKey, isBlocked, recordHit, tooManyRequests } from "@/lib/rate-limit";
+
+// Limits on WRONG guesses. Only failures are counted: a school full of staff sharing one Wi-Fi address all
+// signing in correctly at a morning drill must never trip these. 10 wrong guesses per person per school and
+// 100 wrong-or-unknown attempts per person overall, each per 15 minutes. Together with the minimum password
+// lengths this makes guessing a password impractical, without ever locking a whole school out.
+const WINDOW_SECONDS = 15 * 60;
+const MAX_WRONG_PER_ORG = 10;
+const MAX_FAILURES_OVERALL = 100;
 
 // Re-verifies server-side regardless of what the client already checked —
 // the client-side lookup (for deciding whether to show a password field) is
@@ -24,20 +33,19 @@ export async function POST(request: Request) {
     return jsonError("Missing or invalid code", 400);
   }
 
-  const supabase = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const who = clientKey(request);
 
-  const { data: orgs, error: lookupError } = await supabase.rpc("eop_lookup_org", {
-    p_code: code,
-  });
+  // Someone who has already made too many failed attempts is turned away before we do any work for them.
+  const overall = await isBlocked("verify:any", who, MAX_FAILURES_OVERALL, WINDOW_SECONDS);
+  if (overall.blocked) return tooManyRequests(overall.retryAfterSeconds, "Too many incorrect attempts.");
 
-  if (lookupError || !orgs || orgs.length === 0) {
+  const org = await lookupOrgByCode(code);
+
+  if (!org) {
+    // Unknown codes count too, so the sign-in screen can't be used to hunt for valid plan codes.
+    await recordHit("verify:any", who, MAX_FAILURES_OVERALL, WINDOW_SECONDS);
     return NextResponse.json({ error: "Code not found" }, { status: 404 });
   }
-
-  const org = orgs[0] as { id: string; name: string; has_password: boolean; active: boolean };
 
   // Explicit `=== false` (not just falsy) so this defaults open — a
   // database that hasn't run the `active` migration yet returns undefined,
@@ -49,6 +57,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const perOrgBucket = `verify:org:${org.id}`;
+  const perOrg = await isBlocked(perOrgBucket, who, MAX_WRONG_PER_ORG, WINDOW_SECONDS);
+  if (perOrg.blocked) return tooManyRequests(perOrg.retryAfterSeconds, "Too many incorrect attempts.");
+
+  // A wrong password (or wrong admin passphrase) is recorded against this person, for this school and overall.
+  // At most once per request, however many branches below notice the same wrong guess.
+  let failureRecorded = false;
+  const recordFailure = async () => {
+    if (failureRecorded) return;
+    failureRecorded = true;
+    await Promise.all([
+      recordHit(perOrgBucket, who, MAX_WRONG_PER_ORG, WINDOW_SECONDS),
+      recordHit("verify:any", who, MAX_FAILURES_OVERALL, WINDOW_SECONDS),
+    ]);
+  };
+
   // has_password means a password is REQUIRED for base (User-tier) entry.
   // An org can also have a second, independent admin-tier passphrase even
   // when has_password is false — in that case any input that isn't the
@@ -57,17 +81,26 @@ export async function POST(request: Request) {
   let tier: "user" | "admin" = "user";
 
   if (password) {
-    const { data: matchedTier } = await supabase.rpc("eop_verify_org_password", {
+    // Service-role call: eop_verify_org_password is not callable with the public key, so this route (with the
+    // limits above) is the only way to test a password.
+    const { data: matchedTier } = await createAdminClient().rpc("eop_verify_org_password", {
       p_org_id: org.id,
       p_password: password,
     });
 
     if (matchedTier === "admin" || matchedTier === "user") {
       tier = matchedTier;
-    } else if (org.has_password) {
-      return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
+    } else {
+      // Something was typed and it matched nothing: that is a wrong guess EVEN IF the school has no staff
+      // password (where the field is optional and a wrong entry just falls back to normal access) — otherwise
+      // the admin passphrase could be guessed for free on those plans.
+      await recordFailure();
+      if (org.has_password) {
+        return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
+      }
     }
   } else if (org.has_password) {
+    // Nothing was typed: not a guess, so it isn't counted.
     return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
   }
 
@@ -75,10 +108,14 @@ export async function POST(request: Request) {
   // caller's current session untouched, rather than quietly issuing a fresh
   // User-level cookie (which is what the optional-password path above does).
   if (requireAdmin && tier !== "admin") {
+    if (password) await recordFailure(); // e.g. the staff password typed where the admin passphrase belongs
     return NextResponse.json({ error: "Incorrect admin passphrase" }, { status: 401 });
   }
 
-  const cookie = createSessionCookie(org.id, tier);
+  // The cookie is stamped with the school's current session_epoch, so changing a password later signs
+  // everyone who entered with the old one back out.
+  const state = await loadOrgState(org.id);
+  const cookie = createSessionCookie(org.id, tier, state?.session_epoch ?? 0);
   const response = NextResponse.json({ ok: true, name: org.name });
   response.cookies.set(cookie.name, cookie.value, {
     httpOnly: true,

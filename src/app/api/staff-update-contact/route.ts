@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SESSION_COOKIE_NAME, verifySessionCookie } from "@/lib/eop-session";
+import { getActiveSession } from "@/lib/eop-org";
+import { clientKey, recordHit, tooManyRequests } from "@/lib/rate-limit";
 import { isUuid, jsonError, readJsonObject } from "@/lib/api-utils";
 
 const MAX_PHONE_LENGTH = 40;
@@ -14,12 +14,15 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // touches nothing except these two columns, no matter what else is in the
 // request body, so this can never become a path to editing plan structure.
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  const session = verifySessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const session = await getActiveSession();
 
   if (!session || session.tier !== "admin") {
     return jsonError("Not authorized", 403);
   }
+
+  // Abuse guard, not a normal-use limit: generous enough for a whole school behind one Wi-Fi address.
+  const limited = await recordHit("write:contact", `${session.orgId}:${clientKey(request)}`, 120, 15 * 60);
+  if (limited.blocked) return tooManyRequests(limited.retryAfterSeconds);
 
   const body = await readJsonObject(request);
   if (!body || !isUuid(body.contactId)) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SESSION_COOKIE_NAME, verifySessionCookie } from "@/lib/eop-session";
+import { getActiveSession } from "@/lib/eop-org";
+import { clientKey, recordHit, tooManyRequests } from "@/lib/rate-limit";
 import { isUuid, jsonError, readJsonObject } from "@/lib/api-utils";
 
 const MAX_FIELDS = 100;
@@ -12,12 +12,15 @@ const MAX_VALUE_LENGTH = 5000;
 // that follows on the client reaches anyone's inbox — a misconfigured mail
 // app on someone's phone shouldn't mean an Incident Report is just gone.
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  const session = verifySessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const session = await getActiveSession();
 
   if (!session) {
     return jsonError("Not authorized", 403);
   }
+
+  // Abuse guard, not a normal-use limit: generous enough for a whole school behind one Wi-Fi address.
+  const limited = await recordHit("write:form", `${session.orgId}:${clientKey(request)}`, 150, 15 * 60);
+  if (limited.blocked) return tooManyRequests(limited.retryAfterSeconds);
 
   const body = await readJsonObject(request);
   if (!body || !isUuid(body.formId) || !body.data || typeof body.data !== "object" || Array.isArray(body.data)) {

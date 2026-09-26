@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SESSION_COOKIE_NAME, verifySessionCookie } from "@/lib/eop-session";
+import { getActiveSession } from "@/lib/eop-org";
+import { clientKey, recordHit, tooManyRequests } from "@/lib/rate-limit";
 
 // Lets a Facility Admin (passphrase tier — no account/login) start, post an
 // update to, or close an incident directly from the staff-facing app, the
@@ -10,12 +10,15 @@ import { SESSION_COOKIE_NAME, verifySessionCookie } from "@/lib/eop-session";
 // login. Same signed-cookie gate as staff-update-contact, same
 // service-role write path as every other public write in this app.
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  const session = verifySessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const session = await getActiveSession();
 
   if (!session || session.tier !== "admin") {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
+
+  // Abuse guard, not a normal-use limit: generous enough for a whole school behind one Wi-Fi address.
+  const limited = await recordHit("write:incident", `${session.orgId}:${clientKey(request)}`, 120, 15 * 60);
+  if (limited.blocked) return tooManyRequests(limited.retryAfterSeconds);
 
   const { action, name, message, incidentId } = (await request.json()) as {
     action?: "start" | "post_update" | "close";

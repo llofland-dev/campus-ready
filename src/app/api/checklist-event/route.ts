@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SESSION_COOKIE_NAME, verifySessionCookie } from "@/lib/eop-session";
+import { getActiveSession } from "@/lib/eop-org";
+import { clientKey, recordHit, tooManyRequests } from "@/lib/rate-limit";
 import { isUuid, jsonError, readJsonObject } from "@/lib/api-utils";
 import { categoryByKey } from "@/lib/categories";
 
@@ -12,12 +12,15 @@ const MAX_ACTOR_NAME_LENGTH = 100;
 // checkbox UI itself never depends on this succeeding, since it must keep
 // working with no connectivity.
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  const session = verifySessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const session = await getActiveSession();
 
   if (!session) {
     return jsonError("Not authorized", 403);
   }
+
+  // Abuse guard, not a normal-use limit: generous enough for a whole school behind one Wi-Fi address.
+  const limited = await recordHit("write:checklist", `${session.orgId}:${clientKey(request)}`, 3000, 15 * 60);
+  if (limited.blocked) return tooManyRequests(limited.retryAfterSeconds);
 
   const body = await readJsonObject(request);
   if (

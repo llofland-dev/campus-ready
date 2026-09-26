@@ -1,6 +1,5 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SESSION_COOKIE_NAME, verifySessionCookie, type AccessTier } from "@/lib/eop-session";
 import type { Organization } from "@/lib/supabase/types";
@@ -40,18 +39,43 @@ export function normalizeOrgCode(code: string): string {
   return decoded.trim().toUpperCase();
 }
 
-// Public, pre-auth lookup — just enough to know whether a code exists and
-// whether to show a password field. Uses the anon key directly; safe
-// because eop_lookup_org never returns the password hash.
+// Pre-auth lookup — just enough to know whether a code exists and whether to
+// show a password field. Runs on the server with the service-role client:
+// eop_lookup_org is NOT callable with the public (anon) key, so a stranger
+// can't enumerate organizations or pull an org's id straight from Supabase.
+// It never returns a password hash.
 export async function lookupOrgByCode(code: string): Promise<OrgLookup> {
-  const supabase = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = createAdminClient();
   const { data } = await supabase.rpc("eop_lookup_org", { p_code: normalizeOrgCode(code) });
   const row = data && data.length > 0 ? data[0] : null;
   if (!row) return null;
   return { ...row, logoUrl: orgLogoUrl(supabase, row.logo_path) };
+}
+
+// Reads the columns needed to decide whether a session is still good. `session_epoch` arrived with the
+// 2026-09-27 security migration; until that has been run the column doesn't exist, so retry without it
+// (epoch 0) rather than treating every school as missing.
+type OrgState = { id: string; active: boolean | null; session_epoch: number };
+export async function loadOrgState(orgId: string): Promise<OrgState | null> {
+  const admin = createAdminClient();
+  const first = await admin.from("organizations").select("id, active, session_epoch").eq("id", orgId).maybeSingle();
+  if (!first.error) return first.data ? { ...first.data, session_epoch: first.data.session_epoch ?? 0 } : null;
+  const fallback = await admin.from("organizations").select("id, active").eq("id", orgId).maybeSingle();
+  return fallback.data ? { ...fallback.data, session_epoch: 0 } : null;
+}
+
+// The ONE way server code should read the staff session. Beyond checking the cookie's signature and expiry it
+// confirms the school still exists and isn't suspended, and that no password or passphrase has changed since
+// the cookie was issued (the cookie's epoch must equal the school's current session_epoch) — so changing a
+// password signs everyone out right away, and suspending a school stops its API writes too.
+export async function getActiveSession(): Promise<{ orgId: string; tier: AccessTier } | null> {
+  const cookieStore = await cookies();
+  const session = verifySessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  if (!session) return null;
+  const org = await loadOrgState(session.orgId);
+  // `=== false` (not just falsy) so a database without the `active` column yet reads as active.
+  if (!org || org.active === false || org.session_epoch !== session.epoch) return null;
+  return { orgId: session.orgId, tier: session.tier };
 }
 
 // Resolves the org for a /plan/[code] request, but only if the caller has
@@ -61,8 +85,7 @@ export async function lookupOrgByCode(code: string): Promise<OrgLookup> {
 export async function getVerifiedOrg(
   code: string
 ): Promise<(Organization & { logoUrl: string | null; tier: AccessTier }) | null> {
-  const cookieStore = await cookies();
-  const session = verifySessionCookie(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const session = await getActiveSession();
   if (!session) return null;
 
   const admin = createAdminClient();

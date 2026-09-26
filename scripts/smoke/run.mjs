@@ -423,8 +423,67 @@ async function run() {
   const signedInAgain = await solo().auth.signInWithPassword({ email: fx.email, password: newPassword });
   check("the login signs in with the new password", !signedInAgain.error, signedInAgain.error?.message ?? "");
 
+  // Protections added after the 2026-09-26 security audit. Each of these was a real gap: password guessing was
+  // unlimited (also straight at Supabase with the public key), an admin's browser could read the school's password
+  // hashes, minimum lengths were only checked in the browser, and changing a password did not sign anyone out.
+  // Several depend on the database script in supabase/migrations/20260927100000_security_hardening.sql having
+  // been run, so a missing migration shows up here instead of going unnoticed.
+  group("9. Security basics");
+  const publicClient = createClient(DB_URL, ANON, { auth: { persistSession: false } });
+  const oracle = await publicClient.rpc("eop_verify_org_password", { p_org_id: fx.orgId, p_password: "not-the-password" });
+  check("the public key cannot call the password check directly", Boolean(oracle.error), "it answered — anyone could guess passwords straight at Supabase");
+  const lookup = await publicClient.rpc("eop_lookup_org", { p_code: fx.code });
+  check("the public key cannot look up organizations directly", Boolean(lookup.error) || (lookup.data ?? []).length === 0, "it returned the organization");
+  const hashRead = await authed.from("organizations").select("access_password_hash, admin_password_hash").eq("id", fx.orgId);
+  check("a school admin's browser cannot read the school's password hashes", Boolean(hashRead.error), "the hash columns were returned");
+
+  if (IS_PRODUCTION_HOST) {
+    for (const path of ["/", "/admin/login"]) {
+      const res = await fetch(BASE + path);
+      const h = (n) => res.headers.get(n) ?? "";
+      const csp = h("content-security-policy");
+      check(`${path} sends HSTS, nosniff, no-framing and a Content-Security-Policy`, /max-age=\d{7,}/.test(h("strict-transport-security")) && h("x-content-type-options") === "nosniff" && /deny/i.test(h("x-frame-options")) && /frame-ancestors 'none'/.test(csp) && /object-src 'none'/.test(csp) && /default-src 'self'/.test(csp), `csp=${csp ? "present" : "MISSING"}`);
+    }
+  }
+
+  // The Facility Admin tier lapses after a day (normal staff access lasts longer), so a lost phone doesn't keep admin for a month.
+  const adminOnly = new Session();
+  await adminOnly.post("/api/verify", { code: fx.code, password: fx.adminPw });
+  let adminUntil = 0;
+  try {
+    adminUntil = JSON.parse(Buffer.from((adminOnly.cookies.get("eop_session") ?? "").split(".")[0], "base64url").toString()).adminUntil ?? 0;
+  } catch {}
+  const adminWindow = adminUntil - Math.floor(Date.now() / 1000);
+  check("Facility Admin access lasts at most a day", adminWindow > 0 && adminWindow <= 24 * 3600 + 60, `window ${adminWindow}s`);
+
+  // Changing a password signs out everyone who entered with the old one.
+  const oldSession = new Session();
+  await oldSession.post("/api/verify", { code: fx.code, password: fx.staffPw });
+  const beforeChange = await oldSession.page(`/plan/${fx.code}`);
+  const newStaffPw = `changed-${rnd()}`;
+  const staffPwChange = await authed.rpc("eop_set_org_password", { p_password: newStaffPw });
+  const afterChange = await oldSession.page(`/plan/${fx.code}`);
+  check("changing the staff password signs out existing sessions", !staffPwChange.error && beforeChange.html.includes("Access level") && afterChange.html.includes("Enter the plan password"), staffPwChange.error?.message ?? "the old session still works");
+  const adminAfter = await adminOnly.page(`/plan/${fx.code}`);
+  check("changing the staff password also ends admin sessions", adminAfter.html.includes("Enter the plan password"), "the old admin session still works");
+
+  // Guess throttling — LAST, because it deliberately locks this client out of this throwaway school for 15 minutes.
+  const wrongCodes = [];
+  for (let i = 0; i < 10; i++) wrongCodes.push((await visitor.post("/api/verify", { code: fx.code, password: `wrong-guess-${i}` })).status);
+  check("wrong passwords are refused, not silently accepted", wrongCodes.every((c) => c === 401), wrongCodes.join(","));
+  const throttled = await visitor.post("/api/verify", { code: fx.code, password: "wrong-guess-11" });
+  check("after 10 wrong guesses further attempts are stopped (HTTP 429 with Retry-After)", throttled.status === 429 && Number(throttled.headers.get("retry-after")) > 0, `HTTP ${throttled.status}`);
+  const stillLocked = await visitor.post("/api/verify", { code: fx.code, password: newStaffPw });
+  check("even the right password is refused while that client is locked out", stillLocked.status === 429, `HTTP ${stillLocked.status}`);
+
+  // Last, because if the database rule is missing these calls would WORK and change the school's passwords.
+  const shortStaff = await authed.rpc("eop_set_org_password", { p_password: "short" });
+  check("a staff password under 8 characters is refused by the database", Boolean(shortStaff.error), "accepted");
+  const shortPass = await authed.rpc("eop_set_org_admin_password", { p_password: "123456789" });
+  check("a Facility Admin passphrase under 10 characters is refused by the database", Boolean(shortPass.error), "accepted");
+
   if (CHECK_LOGS) {
-    group("9. Vercel server log");
+    group("10. Vercel server log");
     const minutes = Math.ceil((Date.now() - startedAt) / 60000) + 1;
     try {
       const out = execSync(`npx --yes vercel@59.14.0 logs --status-code 500 --since ${minutes}m -n 20`, { encoding: "utf8", timeout: 120000, stdio: ["ignore", "pipe", "pipe"] });
