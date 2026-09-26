@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "smoke": "node --env-file=.env.local scripts/smoke/run.mjs"
+    "smoke": "node --env-file=.env.local scripts/smoke/run.mjs",
+    "demo-check": "node --env-file=.env.local scripts/demo-check.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
