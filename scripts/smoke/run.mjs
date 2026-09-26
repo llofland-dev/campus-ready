@@ -183,10 +183,13 @@ async function run() {
   const visitor = new Session();
 
   group("1. Site basics");
-  for (const path of ["/menu", "/code", "/offline.html", "/manifest.webmanifest", "/privacy", "/terms"]) {
+  for (const path of ["/menu", "/code", "/offline.html", "/manifest.webmanifest", "/privacy", "/terms", "/support"]) {
     const r = await visitor.page(path);
     check(`${path} loads`, r.status === 200, `HTTP ${r.status}`);
   }
+  const support = await visitor.page("/support");
+  check("Support page says to call 911 first and how to reach us", support.html.includes("call 911 first") && support.html.includes("Admin@emergencyprepsolutions.org"));
+  check("home page links to Support", (await visitor.page("/")).html.includes('href="/support"'));
   const sw = await visitor.page("/sw.js");
   check("service worker file is served with the offline-plan sync", sw.status === 200 && sw.html.includes("sync-plan"));
 
