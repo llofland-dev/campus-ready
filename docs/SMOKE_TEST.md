@@ -38,10 +38,13 @@ Options (after `--`):
    with no text, the size limit, and the file-type check.
 5. **Rendering** — publishes the imported drafts and checks the pages staff would open (tables, lists,
    headings, tap-to-dial phone numbers, checkboxes).
-6. **Times** — the parent status page and the admin incident report must send their times as labelled UTC
-   and let the browser convert them. Formatted on the server (Vercel runs in UTC) they showed families the
-   wrong hour (a New York parent saw 6:43 PM for an update posted at 2:43 PM) and logged a React hydration
-   error; an HTTP-only test could not see that until it looked for the server-formatted pattern.
+6. **Family status page** — times, and pick-up information. The parent status page and the admin incident
+   report must send their times as labelled UTC and let the browser convert them. Formatted on the server
+   (Vercel runs in UTC) they showed families the wrong hour (a New York parent saw 6:43 PM for an update
+   posted at 2:43 PM) and logged a React hydration error; an HTTP-only test could not see that until it
+   looked for the server-formatted pattern. The "Picking up your child" section must show a page titled
+   `Family Pick-Up Information` when there is one, and fall back to the staff `Meeting Locations` page when
+   there isn't.
 7. **Password reset and Supabase redirect settings** — these live in the Supabase dashboard, not in the
    code, so a wrong value breaks reset silently (it once sent people to `http://localhost:3000`). Asks
    Supabase (no email is sent) whether reset links may return to each production address, that a made-up

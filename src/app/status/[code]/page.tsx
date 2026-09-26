@@ -8,6 +8,10 @@ import { AlertIcon, ClipboardIcon, ChevronRightIcon } from "@/components/icons";
 import { AutoRefresh } from "./auto-refresh";
 import { BackButton } from "./back-button";
 
+// Plan pages that supply the "Picking up your child" section, most preferred first (matched
+// case-insensitively). See where they are used below.
+const PICKUP_PAGE_TITLES = ["Family Pick-Up Information", "Meeting Locations"];
+
 // Public, no-login, no-plan-code-gate page — deliberately outside the
 // staff /plan/[code] session-cookie flow (see src/lib/eop-org.ts). The
 // org_code is already the same "not secret, share it" identifier used at
@@ -47,13 +51,18 @@ export default async function StatusPage({ params }: { params: Promise<{ code: s
         .returns<IncidentUpdate[]>()
     : { data: [] as IncidentUpdate[] };
 
-  const { data: meetingLocationsPage } = await admin
+  // The pick-up information families see. Prefer a page an administrator wrote FOR families, titled
+  // "Family Pick-Up Information"; fall back to the staff "Meeting Locations" page so existing plans keep
+  // working. Either way this page is PUBLIC (no login), so it must contain nothing staff-only. The staff
+  // "Meeting Locations" page is written for staff ("bring classroom emergency bags…"), which is why a
+  // dedicated family page is better.
+  const { data: pickupCandidates } = await admin
     .from("plan_pages")
-    .select("body")
+    .select("title, body")
     .eq("org_id", org.id)
-    .ilike("title", "Meeting Locations")
-    .limit(1)
-    .maybeSingle<{ body: string }>();
+    .or(PICKUP_PAGE_TITLES.map((t) => `title.ilike.${t}`).join(","))
+    .returns<{ title: string; body: string }[]>();
+  const pickupPage = PICKUP_PAGE_TITLES.map((t) => pickupCandidates?.find((p) => p.title.trim().toLowerCase() === t.toLowerCase())).find(Boolean);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black">
@@ -112,8 +121,8 @@ export default async function StatusPage({ params }: { params: Promise<{ code: s
 
         <section className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-950">
           <h2 className="mb-2 text-base font-semibold text-zinc-900 dark:text-zinc-50">Picking up your child</h2>
-          {meetingLocationsPage?.body ? (
-            <Markdown>{meetingLocationsPage.body}</Markdown>
+          {pickupPage?.body ? (
+            <Markdown>{pickupPage.body}</Markdown>
           ) : (
             <p className="text-sm text-zinc-500">
               Contact the school directly for pick-up location information.

@@ -29,7 +29,8 @@ written down here.
    - *Incident Status* → **Start incident** (leave the name blank — it stamps the time in your timezone).
    - Point at the red **Active incident** banner that now shows on every staff phone.
    - **Post an update** ("Hold in effect. Students are safe in classrooms.") → on the parent device it appears within
-     20 seconds, with no login and the time in the parent's own timezone. Mention the pick-up info and photo-ID note.
+     20 seconds, with no login and the time in the parent's own timezone. Scroll to **Picking up your child** — that is the
+     school's own "Family Pick-Up Information" page, written for parents (a public page: no login, so nothing staff-only on it).
    - Tick a step on the **Hold Drill Checklist**: while an incident is active it is logged to it with the time (and the
      person's name, if they enter one when the checklist asks).
    - **Close incident**. Then **Mail to** → pick the Program Director from the contacts list → *Email incident report*:

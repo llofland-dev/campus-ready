@@ -352,7 +352,7 @@ async function run() {
   // an update posted at 2:43 PM stamped 6:43 PM — and rendered inside a client component they also
   // broke hydration (React error #418). Both were invisible to an HTTP-only test until we looked for
   // the server-formatted pattern, so look for it.
-  group("7. Times are shown in the viewer's own timezone");
+  group("7. Family status page: times and pick-up information");
   const incident = await svc.from("incidents").insert({ org_id: fx.orgId, name: "ZZ smoke incident" }).select("id").single();
   await svc.from("incident_updates").insert({ org_id: fx.orgId, incident_id: incident.data?.id, message: "ZZ smoke update" });
   const serverFormattedTime = /\d{1,2}\/\d{1,2}\/\d{4},? \d{1,2}:\d{2}(:\d{2})?\s?[AP]M/;
@@ -360,6 +360,18 @@ async function run() {
   const familyPage = await visitor.page(`/status/${fx.code}`);
   check("parent status page sends its times as labelled UTC", familyPage.status === 200 && labelledUtcTime.test(familyPage.html), `HTTP ${familyPage.status}`);
   check("parent status page has no server-formatted (wrong-timezone) time", !serverFormattedTime.test(familyPage.html), (familyPage.html.match(serverFormattedTime) ?? [""])[0]);
+  // The "Picking up your child" section is public. A page written FOR families ("Family Pick-Up Information")
+  // must win over the staff "Meeting Locations" page (staff wording like "bring classroom emergency bags"),
+  // but plans that only have the staff page must keep working.
+  const pickupSection = await svc.from("plan_sections").insert({ org_id: fx.orgId, title: "ZZ Pick-up", category: "reunification", sort_order: 50 }).select("id").single();
+  const addPickupPage = (title, body, order) => svc.from("plan_pages").insert({ org_id: fx.orgId, section_id: pickupSection.data?.id, title, body, sort_order: order });
+  await addPickupPage("Meeting Locations", "ZZ-STAFF-MEETING bring classroom emergency bags", 1);
+  const staffOnly = await visitor.page(`/status/${fx.code}`);
+  check("family page falls back to the staff Meeting Locations page when there is no family page", staffOnly.html.includes("ZZ-STAFF-MEETING"));
+  await addPickupPage("Family Pick-Up Information", "ZZ-FAMILY-PICKUP go to the back courtyard", 2);
+  const withFamily = await visitor.page(`/status/${fx.code}`);
+  check("family page shows 'Family Pick-Up Information' instead of the staff page", withFamily.html.includes("ZZ-FAMILY-PICKUP") && !withFamily.html.includes("ZZ-STAFF-MEETING"), withFamily.html.includes("ZZ-STAFF-MEETING") ? "still shows the staff page" : "family page text missing");
+
   const incidentReport = await admin.page(`/admin/incidents/${incident.data?.id}`);
   check("admin incident report sends its times as labelled UTC", incidentReport.status === 200 && labelledUtcTime.test(incidentReport.html), `HTTP ${incidentReport.status}`);
   check("admin incident report has no server-formatted (wrong-timezone) time", !serverFormattedTime.test(incidentReport.html), (incidentReport.html.match(serverFormattedTime) ?? [""])[0]);

@@ -84,6 +84,7 @@ for (const f of forms) if (f.recipient_email && !/example/i.test(f.recipient_ema
 for (const p of pages) if (p.body.trim().length < 40) warn(`page "${p.title}" is nearly empty`);
 const fillIn = /\bFill in\b[^\n|]*|(?:^|[\n|] ?)Enter (?:the|your) [^\n|]*/; // case-sensitive: not "re-enter the building"
 for (const p of pages) if (fillIn.test(p.body)) warn(`page "${p.title}" has a fill-in-the-blank line ("${p.body.match(fillIn)[0].trim()}")`);
+if (!pages.some((p) => p.title.trim().toLowerCase() === "family pick-up information")) warn('no "Family Pick-Up Information" page — the public parent status page falls back to the staff "Meeting Locations" page, which is written for staff');
 for (const s of sections) if (!pages.some((p) => p.section_id === s.id)) warn(`section "${s.title}" has no pages`);
 for (const c of checklists) if (!items.some((i) => i.checklist_id === c.id)) warn(`checklist "${c.title}" has no items`);
 
