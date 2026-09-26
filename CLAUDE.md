@@ -32,5 +32,8 @@ Deeper history and the operations sheet live in Claude's project memory for this
   test does this for you (`ZZSMOKE…` / `zz-smoke-…`).
 - Real data must not be changed without his confirmation: the demo orgs `MAPLERIDGE` and `BRIDGEWAY` (a real prospect demo) and his admin login. Read-only checks are fine.
 - Terms / Privacy / Support pages are intentionally not ported from Playbook yet — they need school-specific wording (FERPA, student records). Don't copy Playbook's hospital wording.
-- Playbook fixes are brought over with a three-way merge, not by hand-copying — the method and the fork point (`d08a46a`) are in the ops note.
+- **Two-way sync with Playbook — Larry's standing rule (2026-09-26).** A fix or improvement that helps both apps must reach both, and every change is recorded in `docs/CROSS_APP_SYNC.md` in BOTH repos, not only here.
+  After any fix: classify it (shared vs product-specific), port shared ones to Playbook on a branch off its `main` (worktree; never disturb its checked-out `native-wrap`), add ledger rows in both repos, tell Larry.
+  `node scripts/compare-apps.mjs` shows how the apps differ. Never copy hospital wording here or school wording there. Dashboard settings (Supabase email templates, SMTP, redirect URLs) are done once per app, by Larry.
+  The older three-way-merge method (fork point `d08a46a`) is in the ops note.
 - Paste SQL and commands inline in chat; file links have not opened for Larry. Dashboard security settings (sign-ups, passwords, GitHub secrets) are his to change.
