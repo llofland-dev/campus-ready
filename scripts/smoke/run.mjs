@@ -19,11 +19,54 @@ import { makeDocx, makeXlsx, makeTextPdf, makeNoTextPdf, XLSX_ROWS } from "./fix
 const args = process.argv.slice(2);
 const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const BASE = (opt("--url") ?? process.env.SMOKE_BASE_URL ?? "https://campus-ready.vercel.app").replace(/\/$/, "");
-const CHECK_LOGS = !args.includes("--no-logs") && /(campus-ready.vercel.app|emergencyprepsolutions.org)$/.test(new URL(BASE).hostname);
+const IS_PRODUCTION_HOST = /(campus-ready.vercel.app|emergencyprepsolutions.org)$/.test(new URL(BASE).hostname);
+const CHECK_LOGS = !args.includes("--no-logs") && IS_PRODUCTION_HOST;
+// Every address real people reach the app on. Supabase must allow password-reset links to
+// return to each of them. Keep the old vercel.app address here even after it starts
+// redirecting to the custom domain, so links from older emails still work.
+const PRODUCTION_ORIGINS = [...new Set([BASE, "https://campus-ready.vercel.app", "https://campusready.emergencyprepsolutions.org"])].filter((o) => IS_PRODUCTION_HOST && new URL(o).protocol === "https:");
 
 const { NEXT_PUBLIC_SUPABASE_URL: DB_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: ANON, SUPABASE_SERVICE_ROLE_KEY: SERVICE } = process.env;
-if (!DB_URL || !ANON || !SERVICE) {
-  console.error("Missing Supabase settings (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY). Locally, run `npm run smoke` so .env.local is loaded; in GitHub Actions, add the SMOKE_* repository secrets (see .github/workflows/smoke.yml).");
+
+// Check the three settings BEFORE using them, and name the one that is wrong.
+// A malformed URL secret once got past a plain "is it empty?" guard and failed
+// much later with "Invalid supabaseUrl", without saying which setting or why.
+// These values are secrets: this reports what is wrong, never the value.
+const jwtRole = (v) => {
+  try {
+    return JSON.parse(Buffer.from(v.split(".")[1], "base64url").toString()).role;
+  } catch {
+    return null;
+  }
+};
+const SETTINGS = [
+  { env: "NEXT_PUBLIC_SUPABASE_URL", secret: "SMOKE_SUPABASE_URL", value: DB_URL, kind: "url" },
+  { env: "NEXT_PUBLIC_SUPABASE_ANON_KEY", secret: "SMOKE_SUPABASE_ANON_KEY", value: ANON, kind: "anon" },
+  { env: "SUPABASE_SERVICE_ROLE_KEY", secret: "SMOKE_SUPABASE_SERVICE_ROLE_KEY", value: SERVICE, kind: "service" },
+];
+function whatIsWrong({ value, kind }) {
+  if (!value) return "is missing or empty";
+  if (value !== value.trim()) return "has a space or line break at the start or end";
+  if (/^["']|["']$/.test(value)) return "is wrapped in quote marks — paste only the value, without quotes";
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(value)) return "starts with NAME= — paste only what comes AFTER the = sign";
+  if (/\s/.test(value)) return "contains a space or line break in the middle";
+  if (kind === "url") {
+    try {
+      return new URL(value).protocol === "https:" ? null : "must start with https://";
+    } catch {
+      return "is not a web address (expected https://<project>.supabase.co)";
+    }
+  }
+  if (value.length < 20) return "is too short to be a key";
+  if (kind === "anon" && (/^sb_secret_/.test(value) || jwtRole(value) === "service_role")) return "holds the SECRET (service-role) key — the anon/publishable key belongs here";
+  if (kind === "service" && (/^sb_publishable_/.test(value) || jwtRole(value) === "anon")) return "holds the publishable (anon) key — the secret/service-role key belongs here";
+  return null;
+}
+const badSettings = SETTINGS.map((s) => [s, whatIsWrong(s)]).filter(([, why]) => why);
+if (badSettings.length) {
+  console.error("The smoke test cannot start — fix these Supabase settings (values are not shown because they are secrets):");
+  for (const [s, why] of badSettings) console.error(`  - ${s.env} (GitHub repository secret ${s.secret}) ${why}`);
+  console.error("Locally, run `npm run smoke` so .env.local is loaded; in GitHub Actions, the SMOKE_* repository secrets are used (see .github/workflows/smoke.yml).");
   process.exit(2);
 }
 
@@ -301,8 +344,55 @@ async function run() {
     check("imported checklist opens with every item as a checkbox", cp.status === 200 && count(cp.html, /type="checkbox"/g) >= dChk.draft.items.length, `${count(cp.html, /type="checkbox"/g)} boxes`);
   }
 
+  // Password reset depends on settings that live in the Supabase dashboard, not in this code, so a
+  // wrong value there breaks it silently: reset emails once sent people to http://localhost:3000
+  // because the Site URL was never changed and no production address was on the allow-list. This
+  // group asks Supabase (no email is sent) and follows a reset token end to end.
+  group("7. Password reset and Supabase redirect settings");
+  const resetPage = await visitor.page("/admin/reset-password?token_hash=smoke&type=recovery");
+  check("reset-password page loads for a token link", resetPage.status === 200 && resetPage.html.includes("Set a new password"), `HTTP ${resetPage.status}`);
+  check("forgot-password page loads", (await visitor.page("/admin/forgot-password")).status === 200);
+
+  const redirectOf = async (redirectTo) => {
+    const { data, error } = await svc.auth.admin.generateLink({ type: "recovery", email: fx.email, options: { redirectTo } });
+    if (error) return { error: error.message };
+    return { redirect: new URL(data.properties.action_link).searchParams.get("redirect_to"), token: data.properties.hashed_token };
+  };
+  if (PRODUCTION_ORIGINS.length) {
+    for (const origin of PRODUCTION_ORIGINS) {
+      const want = `${origin}/admin/reset-password`;
+      const got = await redirectOf(want);
+      check(`Supabase allows reset links back to ${origin}`, got.redirect === want, got.error ?? `Supabase sent ${got.redirect ?? "nothing"} instead — add ${origin}/** under Authentication -> URL Configuration -> Redirect URLs`);
+    }
+    // A made-up address must be REFUSED; otherwise the checks above prove nothing (an "allow
+    // everything" setting would pass them). When refused, Supabase falls back to its Site URL.
+    const fake = await redirectOf("https://not-allowed.example.invalid/admin/reset-password");
+    check("Supabase refuses a made-up reset address (so the allow-list is real)", Boolean(fake.redirect) && !fake.redirect.includes("not-allowed.example.invalid"), fake.error ?? `it allowed ${fake.redirect}`);
+    let siteOrigin = "";
+    try {
+      siteOrigin = new URL(fake.redirect).origin;
+    } catch {}
+    check("Supabase Site URL is a production https address, not localhost", PRODUCTION_ORIGINS.includes(siteOrigin), `Site URL is ${siteOrigin || "unreadable"} — set it under Authentication -> URL Configuration (the reset email template builds its link from it)`);
+  } else {
+    note("redirect-allow-list checks skipped: they only apply to a production address");
+  }
+
+  // One reset token, followed the way the page follows it: redeem it once, set a password, sign in.
+  const fresh = await redirectOf(`${PRODUCTION_ORIGINS[0] ?? BASE}/admin/reset-password`);
+  const solo = () => createClient(DB_URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+  const redeemer = solo();
+  const redeemed = fresh.token ? await redeemer.auth.verifyOtp({ token_hash: fresh.token, type: "recovery" }) : { error: { message: fresh.error } };
+  check("a reset token can be redeemed", !redeemed.error && Boolean(redeemed.data?.session), redeemed.error?.message ?? "");
+  const newPassword = `Sm-${rnd()}${rnd()}`;
+  const changed = await redeemer.auth.updateUser({ password: newPassword });
+  check("the new password can be set with it", !changed.error, changed.error?.message ?? "");
+  const again = fresh.token ? await solo().auth.verifyOtp({ token_hash: fresh.token, type: "recovery" }) : { error: null };
+  check("the same reset token is refused the second time", Boolean(again.error), "a used reset link still worked");
+  const signedInAgain = await solo().auth.signInWithPassword({ email: fx.email, password: newPassword });
+  check("the login signs in with the new password", !signedInAgain.error, signedInAgain.error?.message ?? "");
+
   if (CHECK_LOGS) {
-    group("7. Vercel server log");
+    group("8. Vercel server log");
     const minutes = Math.ceil((Date.now() - startedAt) / 60000) + 1;
     try {
       const out = execSync(`npx --yes vercel@59.14.0 logs --status-code 500 --since ${minutes}m -n 20`, { encoding: "utf8", timeout: 120000, stdio: ["ignore", "pipe", "pipe"] });

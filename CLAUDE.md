@@ -7,7 +7,7 @@ incident-management area for a facility admin. It is a separate product from Pla
 Deeper history and the operations sheet live in Claude's project memory for this folder (`campus-ready-project.md`, `campus-ready-ops.md`); `README.md` and `docs/` cover the app.
 
 ## Commands
-- `npm run dev -- -p 3002` (dev server), `npm run build`, `npm run lint` (5 known errors in the incident-management files; they are not new and the build passes).
+- `npm run dev -- -p 3002` (dev server), `npm run build`, `npm run lint` (clean — keep it at 0 errors; `useClientValue` in `src/lib/use-client-value.ts` is the way to read `window`/locale values without a hydration mismatch, instead of `setState` in an effect).
 - `npm run smoke` — the post-deploy smoke test (about a minute). **Run it after every production deploy.** See `docs/SMOKE_TEST.md`.
 
 ## Deploying

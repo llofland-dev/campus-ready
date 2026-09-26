@@ -69,7 +69,7 @@ export default async function GlossaryPage({ params }: { params: Promise<{ code:
           <Link href={`/status/${code}`} className="underline">
             status page
           </Link>{" "}
-          for the latest information about what's actually happening right now.
+          for the latest information about what&apos;s actually happening right now.
         </p>
 
         {TERMS.map((t) => (

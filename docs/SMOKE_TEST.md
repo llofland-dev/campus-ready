@@ -38,8 +38,27 @@ Options (after `--`):
    with no text, the size limit, and the file-type check.
 5. **Rendering** — publishes the imported drafts and checks the pages staff would open (tables, lists,
    headings, tap-to-dial phone numbers, checkboxes).
-6. **Vercel log** — asks Vercel for any HTTP 500 errors during the run (production only; skipped if the
+6. **Password reset and Supabase redirect settings** — these live in the Supabase dashboard, not in the
+   code, so a wrong value breaks reset silently (it once sent people to `http://localhost:3000`). Asks
+   Supabase (no email is sent) whether reset links may return to each production address, that a made-up
+   address is refused (so the allow-list is real), and that the Site URL is a production address. Then
+   follows one reset token end to end: redeem it, set a password, sign in, and confirm the same link is
+   refused the second time. The address checks apply to production addresses only.
+7. **Vercel log** — asks Vercel for any HTTP 500 errors during the run (production only; skipped if the
    Vercel CLI isn't signed in on this machine).
+
+If a check in group 6 fails on the redirect or Site URL, the message says what to change:
+Supabase → Authentication → URL Configuration. The production addresses it expects are listed in
+`PRODUCTION_ORIGINS` at the top of `scripts/smoke/run.mjs`; add a new custom domain there too.
+
+## When it refuses to start
+
+Before doing anything it checks the three Supabase settings (`NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — in GitHub Actions, the repository secrets
+`SMOKE_SUPABASE_URL`, `SMOKE_SUPABASE_ANON_KEY`, `SMOKE_SUPABASE_SERVICE_ROLE_KEY`) and names the one that is
+wrong: missing, wrapped in quotes, pasted as `NAME=value` instead of just the value, spaces or a line break
+around it, a URL that isn't `https://…`, or the anon and service-role keys swapped. It never prints the
+values (they are secrets). Fix that setting and run again.
 
 ## Safety
 
@@ -75,6 +94,6 @@ Add fixtures (test documents) in `scripts/smoke/fixtures.mjs`. Keep them fiction
 ## Running it automatically
 
 A GitHub Actions workflow (`.github/workflows/smoke.yml`) runs it after every successful production
-deploy. It needs three repository secrets — see the comments at the top of that file. If they aren't
-set the workflow fails with a clear "missing Supabase settings" message. You can also start it by
-hand from the repository's **Actions** tab.
+deploy. It needs three repository secrets — see the comments at the top of that file. If one is
+missing or malformed the workflow stops with a message naming the secret (see "When it refuses to
+start"). You can also start it by hand from the repository's **Actions** tab.

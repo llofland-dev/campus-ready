@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { MailIncidentReport } from "@/components/mail-incident-report";
+import { useClientValue } from "@/lib/use-client-value";
 
 async function callAction(body: Record<string, unknown>) {
   const res = await fetch("/api/incident-action", {
@@ -33,11 +34,9 @@ export function IncidentManagementPanel({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set in an effect, not during render, so the server-rendered pass and
-  // the first client render both produce the same (empty) markup — avoids
-  // a hydration mismatch (see the identical fix in incidents-panel.tsx).
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
+  // Empty on the server and first client render, so both produce the same
+  // markup — avoids a hydration mismatch (same approach as incidents-panel.tsx).
+  const origin = useClientValue(() => window.location.origin, "");
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();

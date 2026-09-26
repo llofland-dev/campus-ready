@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { MailIncidentReport } from "@/components/mail-incident-report";
+import { useClientValue } from "@/lib/use-client-value";
 
 // `toLocaleString()` depends on the runtime's locale/timezone, which can
 // differ between this server-rendered pass (Node) and the browser that
 // hydrates it — a real, if latent, hydration-mismatch risk in a client
-// component. Rendering nothing until mount sidesteps it: server and the
-// first client render both produce the same (empty) markup.
+// component. `useClientValue` renders nothing until the browser takes over:
+// server and the first client render both produce the same (empty) markup.
 function ClientTime({ iso }: { iso: string }) {
-  const [text, setText] = useState("");
-  useEffect(() => setText(new Date(iso).toLocaleString()), [iso]);
+  const text = useClientValue(() => new Date(iso).toLocaleString(), "");
   return <>{text}</>;
 }
 
@@ -22,14 +22,9 @@ function StatusLink({ orgCode }: { orgCode: string }) {
   const [copied, setCopied] = useState(false);
   // Built client-side from window.location so it matches whichever host
   // this admin panel is actually being viewed on (localhost while testing,
-  // the live domain otherwise) rather than a hardcoded origin. Set in an
-  // effect, not during render, so server and first client render both
-  // produce the same empty-string markup — avoids a hydration mismatch.
-  const [url, setUrl] = useState("");
-
-  useEffect(() => {
-    setUrl(`${window.location.origin}/status/${orgCode}`);
-  }, [orgCode]);
+  // the live domain otherwise) rather than a hardcoded origin. Empty on the
+  // server and first client render, so there is no hydration mismatch.
+  const url = useClientValue(() => `${window.location.origin}/status/${orgCode}`, "");
 
   return (
     <section className="rounded-lg border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-950">
@@ -253,7 +248,7 @@ export function IncidentsPanel({
             <h3 className="mb-1 text-sm font-medium text-zinc-600 dark:text-zinc-400">Start an incident</h3>
             <p className="mb-3 text-sm text-zinc-500">
               While an incident is active, every checklist check-off by any staff member on any
-              device is logged to it automatically — nothing extra for them to do. You'll also be
+              device is logged to it automatically — nothing extra for them to do. You&apos;ll also be
               able to post plain-language updates for families on the public status page above.
             </p>
             <form onSubmit={handleStart} className="flex flex-wrap items-end gap-3">
