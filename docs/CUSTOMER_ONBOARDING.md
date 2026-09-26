@@ -11,6 +11,8 @@ Self-service sign-up is closed: `/admin/signup` redirects to the sign-in page an
    password and tick **Auto Confirm User**. (*Invite user* also works and emails them a link.)
 3. **Send them the sign-in details** (Admin Sign In in the app, or `/admin/login` on the web) and
    ask them to change the password (*Forgot password?* on the sign-in screen sends a reset link).
+   The reset and invite emails need the templates in `docs/SUPABASE_EMAIL_TEMPLATES.md` so the link
+   works on any device.
 4. **On first sign-in they see "set up your organization"**: they enter the school name and a plan
    code (3–24 letters, numbers, dashes or underscores; staff type this to open the plan). You can
    choose the code for them by telling them what to enter.
