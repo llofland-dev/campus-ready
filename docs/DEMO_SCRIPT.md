@@ -1,7 +1,6 @@
 # Demo script (about 12 minutes)
 
-For a live demo to a school or program (first used for Adventist Behavioral Health Schools, on the
-`BRIDGEWAY` demo plan). Contains no passwords — the Facility Admin passphrase is set by Larry and is not
+For a live demo to a school or program, using the `BRIDGEWAY` demo plan (tailored for a behavioral-health schools prospect). Contains no passwords — the Facility Admin passphrase is set by Larry and is not
 written down here.
 
 ## Before you start (5 minutes, the day before and again an hour before)
