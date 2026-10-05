@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Checklist, ChecklistItem } from "@/lib/supabase/types";
 import { CATEGORIES } from "@/lib/categories";
+import { isChecklistHeader } from "@/lib/checklist-text";
 
 const fieldClass =
   "w-full rounded-md border border-black/10 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-black/30 dark:border-white/10 dark:focus:border-white/30";
@@ -205,7 +206,15 @@ export function ChecklistsEditor({
             <div className="divide-y divide-black/10 rounded-lg border border-black/10 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-zinc-950">
               {selectedItems.map((item, index) => (
                 <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-2">
-                  <span className="text-sm text-black dark:text-zinc-50">{item.text}</span>
+                  <span
+                    className={
+                      isChecklistHeader(item.text)
+                        ? "text-sm font-bold text-red-600 dark:text-red-400"
+                        : "text-sm text-black dark:text-zinc-50"
+                    }
+                  >
+                    {item.text}
+                  </span>
                   <div className="flex shrink-0 gap-1 text-xs text-zinc-500">
                     <button onClick={() => moveItem(index, -1)} disabled={index === 0 || busy} className="disabled:opacity-30">
                       ↑
@@ -232,7 +241,7 @@ export function ChecklistsEditor({
               <input
                 value={newItemText}
                 onChange={(e) => setNewItemText(e.target.value)}
-                placeholder="New item text"
+                placeholder='New item text (start with "SECTION" for a bold section divider)'
                 className={fieldClass}
               />
               <button

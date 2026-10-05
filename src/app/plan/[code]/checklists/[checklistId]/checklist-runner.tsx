@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Checklist, ChecklistItem, Incident } from "@/lib/supabase/types";
 import { BRAND } from "@/lib/palette";
 import { getActorName, setActorName } from "@/lib/actor-name";
+import { isChecklistHeader } from "@/lib/checklist-text";
 
 // Check-off state lives in localStorage — it's what makes the checkbox UI
 // itself instant and offline-proof, so that logic is untouched. Alongside
@@ -126,7 +127,8 @@ export function ChecklistRunner({
     setActorNameState(trimmed);
   }
 
-  const doneCount = items.filter((item) => checked[item.id]).length;
+  const checkableItems = items.filter((item) => !isChecklistHeader(item.text));
+  const doneCount = checkableItems.filter((item) => checked[item.id]).length;
 
   return (
     <div className="space-y-4">
@@ -163,7 +165,7 @@ export function ChecklistRunner({
 
       <div className="flex items-center justify-between text-sm text-zinc-500">
         <span>
-          {doneCount} of {items.length} complete
+          {doneCount} of {checkableItems.length} complete
         </span>
         <button onClick={reset} className={confirmingReset ? "font-medium text-red-600 underline dark:text-red-400" : "underline"}>
           {confirmingReset ? "Tap again to reset" : "Reset"}
@@ -171,28 +173,34 @@ export function ChecklistRunner({
       </div>
 
       <div className="space-y-2">
-        {items.map((item) => (
-          <label
-            key={item.id}
-            className="flex min-h-14 items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm dark:bg-zinc-950"
-          >
-            <input
-              type="checkbox"
-              checked={Boolean(checked[item.id])}
-              onChange={() => toggle(item)}
-              className={`h-5 w-5 shrink-0 ${BRAND.accent}`}
-            />
-            <span
-              className={`text-base ${
-                checked[item.id]
-                  ? "text-zinc-400 line-through dark:text-zinc-600"
-                  : "text-black dark:text-zinc-50"
-              }`}
+        {items.map((item) =>
+          isChecklistHeader(item.text) ? (
+            <div key={item.id} className="rounded-xl bg-white px-4 py-3 shadow-sm dark:bg-zinc-950">
+              <p className="text-base font-bold text-red-600 dark:text-red-400">{item.text}</p>
+            </div>
+          ) : (
+            <label
+              key={item.id}
+              className="flex min-h-14 items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm dark:bg-zinc-950"
             >
-              {item.text}
-            </span>
-          </label>
-        ))}
+              <input
+                type="checkbox"
+                checked={Boolean(checked[item.id])}
+                onChange={() => toggle(item)}
+                className={`h-5 w-5 shrink-0 ${BRAND.accent}`}
+              />
+              <span
+                className={`text-base ${
+                  checked[item.id]
+                    ? "text-zinc-400 line-through dark:text-zinc-600"
+                    : "text-black dark:text-zinc-50"
+                }`}
+              >
+                {item.text}
+              </span>
+            </label>
+          )
+        )}
       </div>
 
       {items.length === 0 && <p className="text-sm text-zinc-500">This checklist is empty.</p>}
