@@ -77,7 +77,7 @@ export function PlanOfflineSync({ code, tier }: { code: string; tier: AccessTier
           // `failed` is undefined from a service worker older than this check;
           // that is treated as complete, as before.
           if ((result.failed ?? 0) === 0) {
-            savedAt = writeOfflineSyncMarker(code, tier);
+            savedAt = writeOfflineSyncMarker(code, tier, result.pages ?? 0);
             report({ state: "ready", savedAt });
           } else if (!savedAt) {
             report({ state: "incomplete" });
@@ -99,9 +99,9 @@ export function PlanOfflineSync({ code, tier }: { code: string; tier: AccessTier
       // A marker whose pages the browser has since thrown away (iPhone Safari
       // does this for sites unused for about a week) must not count — and must
       // not block a fresh save by looking recent.
-      const present = marker > 0 && (await hasOfflineCopy(code));
+      const present = marker !== null && (await hasOfflineCopy(code, marker.pages));
       if (cancelled) return;
-      savedAt = present ? marker : 0;
+      savedAt = present && marker ? marker.at : 0;
       if (savedAt) report({ state: "ready", savedAt });
 
       if (savedAt && Date.now() - savedAt < SYNC_INTERVAL_MS) return;
