@@ -21,7 +21,7 @@ export default async function PlanLayout({
     <div className="min-h-screen bg-zinc-50 pb-24 dark:bg-black">
       {children}
       <PlanToolbar code={code} />
-      <PlanOfflineSync code={code} />
+      <PlanOfflineSync code={code} tier={org.tier} />
     </div>
   );
 }

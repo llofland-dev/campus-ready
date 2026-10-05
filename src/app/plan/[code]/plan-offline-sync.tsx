@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import type { AccessTier } from "@/lib/eop-session";
 
 // How long a finished save is considered fresh. Pages someone opens are
 // refreshed anyway (the service worker is network-first); this only bounds how
@@ -12,12 +13,19 @@ const SYNC_TIMEOUT_MS = 2 * 60 * 1000;
 
 // Asks the service worker to save every page of this plan for offline use.
 // Rendered only for someone who has passed the access gate (see plan layout),
-// so the walk sees what that person is allowed to see.
-export function PlanOfflineSync({ code }: { code: string }) {
+// so the walk sees what that person is allowed to see — which is exactly why
+// `tier` is part of the throttle key below, not just `code`.
+export function PlanOfflineSync({ code, tier }: { code: string; tier: AccessTier }) {
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !navigator.onLine) return;
 
-    const key = `eop-plan-sync:${code.toUpperCase()}`;
+    // Keyed on tier, not just the plan code: a User-tier walk never sees the
+    // Incident Management tile, so it never saves those pages. Without this,
+    // someone who opens the app as staff and only unlocks Facility Admin
+    // later — a completely normal sequence — would have the User-tier sync's
+    // 6-hour cooldown silently block a fresh walk, leaving Incident
+    // Management uncached and broken offline right when it matters most.
+    const key = `eop-plan-sync:${code.toUpperCase()}:${tier}`;
     try {
       const last = Number(localStorage.getItem(key) ?? 0);
       if (Date.now() - last < SYNC_INTERVAL_MS) return;
@@ -57,7 +65,7 @@ export function PlanOfflineSync({ code }: { code: string }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [code]);
+  }, [code, tier]);
 
   return null;
 }
