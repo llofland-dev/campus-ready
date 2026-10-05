@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BRAND } from "@/lib/palette";
 import { clearOfflineSyncMarkers } from "@/lib/offline-sync-key";
+import { OfflineLine } from "./offline-line";
 
 // Which level of the plan this device is signed in at, plus the two things
 // the sign-in screen alone can't offer: stepping up to facility-admin access
@@ -102,6 +103,8 @@ export function PlanAccess({
             {tier === "admin" ? "Facility admin" : "User"}
           </span>
         </p>
+
+        <OfflineLine code={code} tier={tier} />
 
         {canUnlock && !unlocking && (
           <button type="button" onClick={() => setUnlocking(true)} className="underline">

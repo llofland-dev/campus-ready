@@ -126,6 +126,10 @@ async function syncPlan(code) {
   const assets = new Set();
   let pages = 0;
   let visited = 0;
+  // Pages that errored out (dropped connection, server error) and so are NOT
+  // saved. Reported back so the app can tell a complete copy from a partial one
+  // instead of calling any walk that saved something "ready".
+  let failed = 0;
 
   while (queue.length && visited < PLAN_SYNC_MAX_PAGES) {
     const batch = queue.splice(0, PLAN_SYNC_CONCURRENCY);
@@ -135,7 +139,10 @@ async function syncPlan(code) {
         try {
           const response = await fetch(path, { credentials: "same-origin" });
           // An error page must not replace a working copy.
-          if (!response.ok) return;
+          if (!response.ok) {
+            if (response.status >= 500) failed++;
+            return;
+          }
 
           let savedPath = path;
           if (response.redirected) {
@@ -177,7 +184,9 @@ async function syncPlan(code) {
           for (const match of html.matchAll(assetPattern)) assets.add(match[0].replace(/&amp;/g, "&"));
           for (const match of html.matchAll(storagePattern)) assets.add(match[0].replace(/&amp;/g, "&"));
         } catch {
-          // Offline or a hiccup mid-walk: keep whatever was saved so far.
+          // Offline or a hiccup mid-walk: keep whatever was saved so far, but
+          // count it so the result says the copy is incomplete.
+          failed++;
         }
       })
     );
@@ -205,5 +214,5 @@ async function syncPlan(code) {
     );
   }
 
-  return { pages, assets: saved };
+  return { pages, assets: saved, failed };
 }
