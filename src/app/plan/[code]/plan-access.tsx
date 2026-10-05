@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BRAND } from "@/lib/palette";
+import { clearOfflineSyncMarkers } from "@/lib/offline-sync-key";
 
 // Which level of the plan this device is signed in at, plus the two things
 // the sign-in screen alone can't offer: stepping up to facility-admin access
@@ -46,11 +47,7 @@ export function PlanAccess({
 
     // A full reload (not a soft refresh) so the saved offline copy of the plan
     // is replaced with the admin-level pages and the background save re-runs.
-    try {
-      localStorage.removeItem(`eop-plan-sync:${code.toUpperCase()}`);
-    } catch {
-      // Storage unavailable — the sync simply runs on its normal schedule.
-    }
+    clearOfflineSyncMarkers(code);
     window.location.reload();
   }
 
@@ -78,10 +75,10 @@ export function PlanAccess({
           if (path === wanted || path.startsWith(`${wanted}/`)) await cache.delete(request);
         }
       }
-      localStorage.removeItem(`eop-plan-sync:${code.toUpperCase()}`);
     } catch {
       // Best-effort: the cookie is already cleared, which is what gates access.
     }
+    clearOfflineSyncMarkers(code);
 
     // Full navigation on purpose (not router.push) so nothing from the
     // signed-in page lingers in memory.
@@ -89,64 +86,103 @@ export function PlanAccess({
     window.location.assign(`/plan/${code}`);
   }
 
+  function closeUnlock() {
+    if (busy) return;
+    setUnlocking(false);
+    setPassphrase("");
+    setError(null);
+  }
+
   return (
-    <div className="mt-8 space-y-3 text-center text-xs text-zinc-500">
-      <p>
-        Access level:{" "}
-        <span className="font-medium text-zinc-700 dark:text-zinc-300">
-          {tier === "admin" ? "Facility admin" : "User"}
-        </span>
-      </p>
+    <>
+      <div className="mt-8 space-y-3 text-center text-xs text-zinc-500">
+        <p>
+          Access level:{" "}
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            {tier === "admin" ? "Facility admin" : "User"}
+          </span>
+        </p>
 
-      {canUnlock && !unlocking && (
-        <button type="button" onClick={() => setUnlocking(true)} className="underline">
-          Facility admin? Unlock admin access
-        </button>
-      )}
+        {canUnlock && !unlocking && (
+          <button type="button" onClick={() => setUnlocking(true)} className="underline">
+            Facility admin? Unlock admin access
+          </button>
+        )}
 
-      {canUnlock && unlocking && (
-        <form onSubmit={unlock} className="mx-auto max-w-xs space-y-2">
-          <input
-            type="password"
-            required
-            autoFocus
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
-            placeholder="Facility admin passphrase"
-            aria-label="Facility admin passphrase"
-            className={`w-full rounded-full border border-black/10 bg-white px-4 py-3 text-base outline-none dark:border-white/10 dark:bg-zinc-950 ${BRAND.focusBorder}`}
-          />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={busy}
-              className={`flex-1 rounded-full px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50 ${BRAND.button} ${BRAND.buttonHover}`}
-            >
-              {busy ? "Checking..." : "Unlock"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setUnlocking(false);
-                setPassphrase("");
-                setError(null);
-              }}
-              className="rounded-full px-4 py-3 text-sm underline disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
+        {/* Sign-out problems only; the unlock dialog shows its own errors. */}
+        {error && !unlocking && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-
-      <div>
-        <button type="button" onClick={signOut} disabled={busy} className="underline disabled:opacity-50">
-          Sign out of this plan
-        </button>
+        <div>
+          <button type="button" onClick={signOut} disabled={busy} className="underline disabled:opacity-50">
+            Sign out of this plan
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* A dialog, not an inline form: inline, the passphrase box and buttons
+          were squeezed between the page footer and the floating bottom nav
+          (and, on a phone, the keyboard). Sitting above the nav, near the top,
+          it stays clear of both. */}
+      {canUnlock && unlocking && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="unlock-title"
+          className="fixed inset-0 z-30 flex items-start justify-center bg-black/50 px-4 pt-[12vh]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeUnlock();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeUnlock();
+          }}
+        >
+          <form onSubmit={unlock} className="w-full max-w-sm space-y-5 rounded-2xl bg-white p-6 text-left shadow-xl dark:bg-zinc-950">
+            <div className="space-y-1">
+              <h2 id="unlock-title" className="text-lg font-semibold text-[#00274c] dark:text-white">
+                Facility admin access
+              </h2>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Enter your facility admin passphrase to unlock Incident Management.
+              </p>
+            </div>
+
+            <input
+              type="password"
+              required
+              autoFocus
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              placeholder="Facility admin passphrase"
+              aria-label="Facility admin passphrase"
+              className={`w-full rounded-full border border-black/10 bg-white px-4 py-3 text-base outline-none dark:border-white/10 dark:bg-zinc-950 ${BRAND.focusBorder}`}
+            />
+
+            {error && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {error}
+              </p>
+            )}
+
+            <div className="space-y-2">
+              <button
+                type="submit"
+                disabled={busy}
+                className={`w-full rounded-full px-4 py-3 text-base font-medium text-white transition-colors disabled:opacity-50 ${BRAND.button} ${BRAND.buttonHover}`}
+              >
+                {busy ? "Checking..." : "Unlock"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={closeUnlock}
+                className="w-full rounded-full px-4 py-2 text-sm text-zinc-600 underline disabled:opacity-50 dark:text-zinc-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
   );
 }

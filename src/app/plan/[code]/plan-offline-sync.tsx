@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { AccessTier } from "@/lib/eop-session";
+import { offlineSyncKey } from "@/lib/offline-sync-key";
 
 // How long a finished save is considered fresh. Pages someone opens are
 // refreshed anyway (the service worker is network-first); this only bounds how
@@ -25,7 +26,7 @@ export function PlanOfflineSync({ code, tier }: { code: string; tier: AccessTier
     // later — a completely normal sequence — would have the User-tier sync's
     // 6-hour cooldown silently block a fresh walk, leaving Incident
     // Management uncached and broken offline right when it matters most.
-    const key = `eop-plan-sync:${code.toUpperCase()}:${tier}`;
+    const key = offlineSyncKey(code, tier);
     try {
       const last = Number(localStorage.getItem(key) ?? 0);
       if (Date.now() - last < SYNC_INTERVAL_MS) return;
