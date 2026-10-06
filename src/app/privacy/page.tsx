@@ -21,7 +21,7 @@ export default function PrivacyPage() {
           <p className="text-xs uppercase tracking-wide text-zinc-400">Last updated September 25, 2026</p>
 
           <p>
-            Campus Ready is operated by Emergency Preparedness Solutions, LLC (&quot;we,&quot; &quot;us&quot;). It
+            Campus Ready is operated by Emergency Preparedness Solutions LLC (&quot;we,&quot; &quot;us&quot;). It
             helps schools and districts (&quot;Schools&quot;) put their emergency operations plan on their
             staff&apos;s phones. This policy explains what information the service handles, what we do with it, and
             how it relates to student privacy laws such as FERPA. It covers the Campus Ready app, its admin area, and

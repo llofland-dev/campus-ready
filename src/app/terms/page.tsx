@@ -20,7 +20,7 @@ export default function TermsPage() {
           <p className="text-xs uppercase tracking-wide text-zinc-400">Last updated September 25, 2026</p>
 
           <p>
-            These terms govern use of Campus Ready, provided by Emergency Preparedness Solutions, LLC (&quot;we,&quot;
+            These terms govern use of Campus Ready, provided by Emergency Preparedness Solutions LLC (&quot;we,&quot;
             &quot;us&quot;), by a school or district (&quot;School&quot;) and by the administrators, staff, and others
             who use Campus Ready under that School&apos;s plan. By using Campus Ready, you agree to these terms, and if
             you use it for a School you confirm you are authorized to do so. If a School and we have signed a separate

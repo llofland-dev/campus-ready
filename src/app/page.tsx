@@ -24,7 +24,7 @@ export default function SplashPage() {
 
       <div className="space-y-2 pb-8 text-center">
         <p className="text-[11px] uppercase tracking-wide text-zinc-400">
-          © {new Date().getFullYear()} Emergency Preparedness Solutions, LLC
+          © {new Date().getFullYear()} Emergency Preparedness Solutions LLC
         </p>
         <p className="text-xs text-zinc-400">
           <Link href="/privacy" className="underline">

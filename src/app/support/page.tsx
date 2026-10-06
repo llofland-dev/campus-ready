@@ -29,7 +29,7 @@ export default function SupportPage() {
           <section className="space-y-2">
             <h2 className={h2}>Contact us</h2>
             <p>
-              Emergency Preparedness Solutions, LLC —{" "}
+              Emergency Preparedness Solutions LLC —{" "}
               <a href="mailto:Admin@emergencyprepsolutions.org" className="underline">
                 Admin@emergencyprepsolutions.org
               </a>
