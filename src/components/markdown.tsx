@@ -9,6 +9,27 @@ function urlTransform(url: string): string {
   return defaultUrlTransform(url);
 }
 
+// The structure react-markdown hands each component, just enough to count a table's columns.
+type HastNode = { tagName?: string; children?: HastNode[] };
+
+function findFirstRow(node: HastNode | undefined): HastNode | undefined {
+  for (const child of node?.children ?? []) {
+    if (child.tagName === "tr") return child;
+    const nested = findFirstRow(child);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+// A table gets room for each of its columns instead of one fixed width. A fixed 480px
+// pushed the Number column of a two-column phone list off the edge of a phone screen;
+// sizing by column count lets that fit while a wide table still scrolls sideways rather
+// than squeezing its text into slivers.
+function tableMinWidth(node: HastNode | undefined): string {
+  const columns = findFirstRow(node)?.children?.filter((c) => c.tagName).length ?? 0;
+  return columns > 0 ? `${columns * 6}rem` : "30rem";
+}
+
 // Styled to match the app's existing typography — used for plan_pages.body,
 // which admins author as Markdown in a plain textarea (no WYSIWYG editor).
 const components: Components = {
@@ -22,10 +43,17 @@ const components: Components = {
   li: (props) => <li {...props} />,
   strong: (props) => <strong className="font-semibold" {...props} />,
   em: (props) => <em className="italic" {...props} />,
-  a: (props) => <a className="underline" {...props} />,
-  table: (props) => (
+  // A phone number never breaks across lines, so a narrow column always shows all of it.
+  a: (props) => (
+    <a className={props.href?.startsWith("tel:") ? "whitespace-nowrap underline" : "underline"} {...props} />
+  ),
+  table: ({ node, ...props }) => (
     <div className="mt-3 overflow-x-auto first:mt-0">
-      <table className="w-full min-w-[480px] border-collapse text-sm" {...props} />
+      <table
+        className="w-full border-collapse text-sm"
+        style={{ minWidth: tableMinWidth(node as HastNode | undefined) }}
+        {...props}
+      />
     </div>
   ),
   thead: (props) => <thead className="bg-black/5 dark:bg-white/10" {...props} />,
