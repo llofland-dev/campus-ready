@@ -197,6 +197,13 @@ async function run() {
   check("install page has iPhone, Android and Chromebook steps and the wait-for-Ready-offline instruction", ["iPhone or iPad", "Android phone or tablet", "Chromebook or computer", "Add to Home Screen", "Ready offline"].every((t) => install.html.includes(t)));
   check("install page draws a QR code", /<svg[^>]*aria-label="QR code for the Campus Ready install page"[\s\S]*?<path d="M[^"]{500,}"/.test(install.html));
   check("home page links to the install page", (await visitor.page("/")).html.includes('href="/install"'));
+  // The one-tap install button works only if the page keeps the browser's "this can be installed" offer, and a tiny
+  // script in every page's <head> does that (src/lib/install-prompt.ts). visitor.page() strips scripts, so read the
+  // raw page. The install page also draws its device-specific steps from the browser, so check its working states.
+  const rawHome = await (await fetch(BASE + "/")).text();
+  check("every page carries the script that catches the browser's install offer", rawHome.includes("beforeinstallprompt") && rawHome.includes("appinstalled"));
+  const rawInstall = await (await fetch(BASE + "/install")).text();
+  check("install page ships its device-aware install flow", rawInstall.includes("Getting your install options ready") && rawInstall.includes("Steps for every kind of device"));
 
   // Home-screen icons. An iPhone wants an exact 180x180 PNG with no transparency (it paints transparent areas
   // black), and Android only fills its icon shape edge to edge when the manifest offers a "maskable" icon;

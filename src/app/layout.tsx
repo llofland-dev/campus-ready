@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { RegisterServiceWorker } from "./register-sw";
+import { INSTALL_CAPTURE_SCRIPT } from "@/lib/install-prompt";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,6 +42,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Catches the browser's "this can be installed" offer on every page, so the install page and the welcome
+            screen's button can use it later (see lib/install-prompt.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_CAPTURE_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         {children}
         <RegisterServiceWorker />
