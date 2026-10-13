@@ -1,0 +1,10 @@
+PDF.js 6.4.299, "legacy" build (Mozilla, Apache License 2.0 — the licence notice is at the top of each file).
+Source: the pdfjs-dist@6.4.299 package, files legacy/build/pdf.min.mjs and legacy/build/pdf.worker.min.mjs.
+
+These two files draw PDF maps inside the app (src/app/plan/[code]/maps/[mapId]/pdf-viewer.tsx), so a PDF keeps the
+header, back arrow and bottom navigation instead of opening in a bare browser tab. They are plain files on purpose,
+not part of the Next.js bundle: their addresses are fixed, so the offline save (public/sw.js) can store them for use
+with no signal, and the app's build and package lockfile are untouched.
+
+To update: download the same two files from a newer pdfjs-dist release, replace them here, and update this note.
+The two files must always come from the SAME version.

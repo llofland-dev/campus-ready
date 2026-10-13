@@ -57,6 +57,10 @@ export const PALETTE: PaletteColor[] = [
 
 const PALETTE_BY_KEY = new Map(PALETTE.map((c) => [c.key, c]));
 
+// The Maps tile and its pages (added 2026-10-13): purple, the one PALETTE color the home screen's other tiles
+// don't already use (Reunification is teal, Contacts pink, Forms green, Checklists gold, Protocols red).
+export const MAPS_COLOR: PaletteColor = PALETTE_BY_KEY.get("purple")!;
+
 export const BRAND = {
   header: "bg-[#00274c]",
   button: "bg-[#00274c]",

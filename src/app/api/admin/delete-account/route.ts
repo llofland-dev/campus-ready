@@ -12,7 +12,7 @@ const PROTECTED_ORG_CODES = (process.env.PROTECTED_ORG_CODES ?? "MAPLERIDGE")
   .map((code) => code.trim().toUpperCase())
   .filter(Boolean);
 
-const STORAGE_BUCKETS = ["org-logos", "section-icons"];
+const STORAGE_BUCKETS = ["org-logos", "section-icons", "org-maps"];
 
 async function removeOrgFiles(admin: ReturnType<typeof createAdminClient>, orgId: string) {
   for (const bucket of STORAGE_BUCKETS) {

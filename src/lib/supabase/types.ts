@@ -54,6 +54,21 @@ export interface Contact {
   created_at: string;
 }
 
+// An uploaded map (floor plan, campus map, evacuation or reunification route). The file lives in the private
+// "org-maps" bucket at `file_path`; staff reach it only through /plan/[code]/maps/[id]/file.
+export interface PlanMap {
+  id: string;
+  org_id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  file_path: string;
+  content_type: string;
+  file_size: number;
+  sort_order: number;
+  created_at: string;
+}
+
 export type FormFieldType =
   | "text"
   | "phone"

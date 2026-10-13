@@ -95,7 +95,8 @@ self.addEventListener("fetch", (event) => {
 // app asks us (see PlanOfflineSync) to walk the plan's pages and save each
 // one as a real page, plus the scripts, styles and images it needs.
 
-const PLAN_SYNC_MAX_PAGES = 150;
+// Counts every address walked: the plan's pages and its map files (maps are linked from their page).
+const PLAN_SYNC_MAX_PAGES = 250;
 const PLAN_SYNC_MAX_ASSETS = 400;
 const PLAN_SYNC_CONCURRENCY = 4;
 
@@ -120,10 +121,14 @@ async function syncPlan(code) {
   const linkPattern = new RegExp(`href="(${root}(?:/[^"#?]*)?)"`, "g");
   const assetPattern = /\/_next\/(?:static\/[^"'\\\s)<>]+|image\?[^"'\\\s)<>]+)/g;
   const storagePattern = /https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/[^"'\\\s)<>]+/g;
+  // The PDF reader (two plain files in /public/pdfjs) that a PDF map page names, so a PDF map opens offline too.
+  const pdfjsPattern = /\/pdfjs\/pdf(?:\.worker)?\.min\.mjs/g;
 
   const seen = new Set([root]);
   const queue = [root];
   const assets = new Set();
+  // Everything saved under the plan: its pages and its map files. The app compares this number with what
+  // is still in the browser later, so a wiped map file counts against "ready" just like a wiped page.
   let pages = 0;
   let visited = 0;
   // Pages that errored out (dropped connection, server error) and so are NOT
@@ -141,6 +146,14 @@ async function syncPlan(code) {
           // An error page must not replace a working copy.
           if (!response.ok) {
             if (response.status >= 500) failed++;
+            return;
+          }
+
+          // A map file (an image or PDF served at /plan/<code>/maps/<id>/file) is saved as it is. It is not a
+          // page to read for links — reading megabytes of image as text would be slow and pointless.
+          if (!(response.headers.get("content-type") || "").includes("text/html")) {
+            await cache.put(path, response);
+            pages++;
             return;
           }
 
@@ -183,6 +196,7 @@ async function syncPlan(code) {
           }
           for (const match of html.matchAll(assetPattern)) assets.add(match[0].replace(/&amp;/g, "&"));
           for (const match of html.matchAll(storagePattern)) assets.add(match[0].replace(/&amp;/g, "&"));
+          for (const match of html.matchAll(pdfjsPattern)) assets.add(match[0]);
         } catch {
           // Offline or a hiccup mid-walk: keep whatever was saved so far, but
           // count it so the result says the copy is incomplete.

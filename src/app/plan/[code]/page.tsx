@@ -3,8 +3,8 @@ import { getVerifiedOrg, lookupOrgByCode } from "@/lib/eop-org";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Contact, Incident, IncidentUpdate } from "@/lib/supabase/types";
 import { CATEGORIES } from "@/lib/categories";
-import { PALETTE } from "@/lib/palette";
-import { AlertIcon, ChecklistIcon, ContactsIcon, FormsIcon, PhoneIcon } from "@/components/icons";
+import { MAPS_COLOR, PALETTE } from "@/lib/palette";
+import { AlertIcon, ChecklistIcon, ContactsIcon, FormsIcon, MapIcon, PhoneIcon } from "@/components/icons";
 import { PlanHeader } from "./plan-header";
 import { AccessGate } from "./access-gate";
 import { PlanAccess } from "./plan-access";
@@ -78,6 +78,15 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
   // actually has an admin passphrase; anything unexpected here just hides it.
   const canUnlock = org.tier !== "admin" && (await lookupOrgByCode(code))?.has_admin_password === true;
 
+  // The Maps tile appears once the school has uploaded at least one map, so a plan that doesn't use maps never
+  // shows an empty tile. A failed count (for instance before the maps migration has been run) reads as "no maps"
+  // rather than an error.
+  const { count: mapCount } = await admin
+    .from("plan_maps")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", org.id);
+  const hasMaps = (mapCount ?? 0) > 0;
+
   const byKey = new Map(PALETTE.map((c) => [c.key, c]));
   // "ics" is handled below as the merged Incident Management tile instead
   // of the generic category-tile loop — see the comment in lib/categories.ts.
@@ -89,6 +98,7 @@ export default async function PlanHubPage({ params }: { params: Promise<{ code: 
       icon: c.icon,
       color: c.color,
     })),
+    ...(hasMaps ? [{ href: `/plan/${code}/maps`, label: "Maps", icon: MapIcon, color: MAPS_COLOR }] : []),
     {
       href: `/plan/${code}/contacts`,
       label: "Contacts",

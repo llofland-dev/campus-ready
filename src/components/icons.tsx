@@ -110,6 +110,15 @@ export function SitemapIcon({ className }: IconProps) {
   );
 }
 
+export function MapIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path className={base} d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20V6.5Z" />
+      <path className={base} d="M9 4v13.5M15 6.5V20" />
+    </svg>
+  );
+}
+
 export function ClipboardIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={className} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

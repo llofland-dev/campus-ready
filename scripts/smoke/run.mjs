@@ -14,6 +14,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { makeDocx, makeXlsx, makeTextPdf, makeNoTextPdf, XLSX_ROWS } from "./fixtures.mjs";
 
 const args = process.argv.slice(2);
@@ -165,6 +166,8 @@ async function removeStaleLeftovers() {
 }
 
 async function teardown() {
+  // The org's rows go with the org, but a file in storage does not.
+  if (fx.mapPath) await svc.storage.from("org-maps").remove([fx.mapPath]);
   if (fx.userId) await svc.from("profiles").update({ org_id: null }).eq("id", fx.userId);
   if (fx.orgId) await svc.from("organizations").delete().eq("id", fx.orgId);
   if (fx.userId) await svc.auth.admin.deleteUser(fx.userId);
@@ -222,6 +225,13 @@ async function run() {
   check("home page links to Support", (await visitor.page("/")).html.includes('href="/support"'));
   const sw = await visitor.page("/sw.js");
   check("service worker file is served with the offline-plan sync", sw.status === 200 && sw.html.includes("sync-plan"));
+  // The PDF reader that draws PDF maps inside the app (public/pdfjs). If these two files were ever lost from a deploy,
+  // PDF maps would silently fall back to "couldn't be shown here".
+  for (const file of ["/pdfjs/pdf.min.mjs", "/pdfjs/pdf.worker.min.mjs"]) {
+    const res = await fetch(BASE + file);
+    const size = (await res.arrayBuffer()).byteLength;
+    check(`PDF reader file ${file} is served as JavaScript`, res.status === 200 && /javascript/.test(res.headers.get("content-type") ?? "") && size > 400000, `HTTP ${res.status}, ${res.headers.get("content-type")}, ${size} bytes`);
+  }
 
   group("2. Self-service sign-up is closed");
   const signup = await visitor.page("/admin/signup");
@@ -293,6 +303,40 @@ async function run() {
   check("after sign-out the password gate is back", (await staff.page(`/plan/${fx.code}`)).html.includes("Enter the plan password"));
   const direct = new Session();
   check("admin passphrase alone works at the gate", (await direct.post("/api/verify", { code: fx.code, password: fx.adminPw })).status === 200);
+
+  // Maps are floor plans, so the files are private: only someone who has entered THIS plan may fetch one.
+  // (Needs supabase/migrations/20261013090000_plan_maps.sql to have been run.)
+  group("4b. Maps (private files, plan staff only)");
+  const MAP_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const mapPath = `${fx.orgId}/${randomUUID()}.png`;
+  const mapUp = await authed.storage.from("org-maps").upload(mapPath, MAP_PNG, { contentType: "image/png" });
+  if (!mapUp.error) fx.mapPath = mapPath;
+  check("an organization admin can upload a map into their own folder", !mapUp.error, `${mapUp.error?.message} — has the maps migration been run?`);
+  const mapRow = mapUp.error
+    ? { error: mapUp.error }
+    : await authed.from("plan_maps").insert({ org_id: fx.orgId, title: "ZZ Smoke Map", file_path: mapPath, content_type: "image/png", file_size: MAP_PNG.length, sort_order: 1 }).select("id").single();
+  check("the map is added to the plan's list", !mapRow.error && Boolean(mapRow.data?.id), mapRow.error?.message);
+  if (mapRow.data?.id) {
+    const mapFile = `/plan/${fx.code}/maps/${mapRow.data.id}/file`;
+    const mapStaff = new Session();
+    await mapStaff.post("/api/verify", { code: fx.code, password: fx.staffPw });
+    const mapHome = await mapStaff.page(`/plan/${fx.code}`);
+    check("the Maps tile appears on the home screen once a map exists", mapHome.html.includes(`/plan/${fx.code}/maps"`), "no Maps tile");
+    const mapList = await mapStaff.page(`/plan/${fx.code}/maps`);
+    check("staff see the map in the Maps list", mapList.status === 200 && mapList.html.includes("ZZ Smoke Map"), `HTTP ${mapList.status}`);
+    const served = await mapStaff.req(mapFile);
+    const servedBytes = Buffer.from(await served.arrayBuffer());
+    check("staff of this plan get the exact file, as an image", served.status === 200 && served.headers.get("content-type") === "image/png" && servedBytes.equals(MAP_PNG), `HTTP ${served.status}`);
+    check("a visitor with no plan session is refused the file", (await new Session().req(mapFile)).status === 403);
+    check("a visitor with no plan session cannot open the Maps list", (await new Session().req(`/plan/${fx.code}/maps`)).status === 307);
+    check("a made-up map id is a clean 404", (await mapStaff.req(`/plan/${fx.code}/maps/${randomUUID()}/file`)).status === 404);
+    const publicTry = await fetch(`${DB_URL}/storage/v1/object/public/org-maps/${mapPath}`);
+    check("the storage bucket is private (no public address for the file)", publicTry.status !== 200, `HTTP ${publicTry.status}`);
+    const svgTry = await authed.storage.from("org-maps").upload(`${fx.orgId}/${randomUUID()}.svg`, Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"), { contentType: "image/svg+xml" });
+    check("an SVG upload is refused (it can carry script)", Boolean(svgTry.error), "accepted");
+    const planted = await authed.storage.from("org-maps").upload(`${randomUUID()}/${randomUUID()}.png`, MAP_PNG, { contentType: "image/png" });
+    check("an admin cannot upload into another organization's folder", Boolean(planted.error), "accepted");
+  }
 
   group("5. Document import (Word, Excel, PDF) on the live site");
   const IMPORT = "/api/admin/import-document";
