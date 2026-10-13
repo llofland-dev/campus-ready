@@ -27,7 +27,9 @@ Options (after `--`):
 
 1. **Site basics** — the public pages, the offline page and manifest, and the service worker with the
    offline-plan sync. Also the **install page** (`/install`: iPhone / Android / Chromebook steps, the
-   wait-for-"Ready offline" instruction, a QR code that is really drawn, and the home-page link to it).
+   wait-for-"Ready offline" instruction, a QR code that is really drawn, and the home-page link to it) and the
+   **home-screen icons** (the iPhone icon is an exact 180x180 opaque PNG linked from the home page; the manifest offers
+   a real 512x512 maskable icon; see `docs/ICONS.md`).
 2. **Sign-up is closed** — `/admin/signup` redirects and the sign-in page has no sign-up link.
 3. **User / Admin split** — password gate; wrong and blank passwords refused; a User cannot see or
    use the Incident Management tile and screens, its checklists, incident actions, or contact editing

@@ -194,6 +194,29 @@ async function run() {
   check("install page has iPhone, Android and Chromebook steps and the wait-for-Ready-offline instruction", ["iPhone or iPad", "Android phone or tablet", "Chromebook or computer", "Add to Home Screen", "Ready offline"].every((t) => install.html.includes(t)));
   check("install page draws a QR code", /<svg[^>]*aria-label="QR code for the Campus Ready install page"[\s\S]*?<path d="M[^"]{500,}"/.test(install.html));
   check("home page links to the install page", (await visitor.page("/")).html.includes('href="/install"'));
+
+  // Home-screen icons. An iPhone wants an exact 180x180 PNG with no transparency (it paints transparent areas
+  // black), and Android only fills its icon shape edge to edge when the manifest offers a "maskable" icon;
+  // without one it shrinks the normal icon onto a white circle. Read the PNG header (size + colour type) directly.
+  const pngInfo = async (path) => {
+    const res = await fetch(BASE + path);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const isPng = res.ok && bytes.length > 33 && bytes.subarray(1, 4).toString() === "PNG";
+    return { isPng, type: res.headers.get("content-type") ?? "", width: isPng ? bytes.readUInt32BE(16) : 0, height: isPng ? bytes.readUInt32BE(20) : 0, hasAlpha: isPng ? bytes[25] === 4 || bytes[25] === 6 : null };
+  };
+  const homeHtml = (await visitor.page("/")).html;
+  const appleHref = (homeHtml.match(/<link[^>]*rel="apple-touch-icon"[^>]*href="([^"]+)"/) ?? homeHtml.match(/<link[^>]*href="([^"]+)"[^>]*rel="apple-touch-icon"/) ?? [])[1];
+  const apple = appleHref ? await pngInfo(appleHref) : null;
+  check("the iPhone home-screen icon is an exact 180x180 PNG with no transparency", Boolean(apple?.isPng) && apple.width === 180 && apple.height === 180 && apple.hasAlpha === false && apple.type.includes("image/png"), apple ? `${apple.width}x${apple.height}, alpha=${apple.hasAlpha}, ${apple.type}` : `no apple-touch-icon link (href=${appleHref})`);
+  let manifestIcons = [];
+  try {
+    manifestIcons = JSON.parse((await visitor.page("/manifest.webmanifest")).html).icons ?? [];
+  } catch {}
+  const maskable = manifestIcons.find((i) => String(i.purpose ?? "").includes("maskable"));
+  const maskableInfo = maskable ? await pngInfo(maskable.src) : null;
+  check("the manifest offers a real 512x512 maskable icon for Android", Boolean(maskableInfo?.isPng) && maskableInfo.width === 512 && maskableInfo.height === 512 && maskableInfo.hasAlpha === false, maskable ? `${maskable.src}: ${maskableInfo?.width}x${maskableInfo?.height}` : "no maskable icon in the manifest");
+  const anyIcons = await Promise.all(manifestIcons.filter((i) => !String(i.purpose ?? "").includes("maskable")).map((i) => pngInfo(i.src)));
+  check("the manifest's normal icons are real PNGs", anyIcons.length >= 2 && anyIcons.every((i) => i.isPng), `${anyIcons.length} normal icons`);
   const support = await visitor.page("/support");
   check("Support page says to call 911 first and how to reach us", support.html.includes("call 911 first") && support.html.includes("Admin@emergencyprepsolutions.org"));
   check("home page links to Support", (await visitor.page("/")).html.includes('href="/support"'));
