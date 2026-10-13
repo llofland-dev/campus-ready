@@ -8,8 +8,8 @@ written down here.
 - [ ] **Run `npm run demo-check`** (read-only; `-- MAPLERIDGE` for the other plan). It confirms **no incident is active** (an
       active one shows a red banner on every staff phone), flags placeholders and real-looking phone numbers or emails, and
       opens every staff screen on the live site. It must end with "Ready to demo."
-- [ ] Phone: Campus Ready installed from `campusready.emergencyprepsolutions.org`, opened once **on Wi-Fi with a minute
-      to spare** so the plan is saved for offline use.
+- [ ] Phone: Campus Ready installed from `campusready.emergencyprepsolutions.org/install` (the page has the steps and a QR
+      code), opened once **on Wi-Fi** until the line under "Access level" says **Ready offline**.
 - [ ] Second device (or a second browser tab) ready to play the **parent**: open `…/status/BRIDGEWAY`.
 - [ ] You know the **Facility Admin passphrase**. Not signed in to the admin already on the phone (Plan home → "Sign out").
 - [ ] Bad venue Wi-Fi? Use your phone's hotspot. Fallback plan: `MAPLERIDGE` has the same content.

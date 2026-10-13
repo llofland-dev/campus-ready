@@ -18,6 +18,9 @@ Self-service sign-up is closed: `/admin/signup` redirects to the sign-in page an
    choose the code for them by telling them what to enter.
 5. **They build the plan** (protocols, contacts, forms, checklists, reunification). Staff open it
    with the plan code.
+   **Send staff the install link** — `https://campusready.emergencyprepsolutions.org/install`. It explains adding
+   Campus Ready to an iPhone, Android phone or Chromebook home screen, tells them to wait for "Ready offline", and
+   has a QR code to print for a staff-room wall. Nothing to download from an app store.
    **Set a staff password before sharing the plan code** (Admin → Overview; at least 8 characters) and a Facility Admin
    passphrase (at least 10, long and unusual — not one word). Without a staff password anyone who knows the plan code can
    read the plan and post form responses. Changing either later signs everyone out. See `docs/SECURITY.md`.

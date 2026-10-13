@@ -47,8 +47,12 @@ export default function SupportPage() {
             <p>
               <strong>Does Campus Ready work without an internet connection?</strong> Yes. After you sign in to your
               plan, stay connected for about a minute so it can save itself to your phone; then your plan&apos;s
-              pages, checklists, and contacts open even with no service. Install it on your home screen for the
-              fastest access (in your browser&apos;s menu, choose Add to Home Screen).
+              pages, checklists, and contacts open even with no service. Add it to your home screen for the
+              fastest access — the{" "}
+              <Link href="/install" className="underline">
+                install steps
+              </Link>{" "}
+              take about 30 seconds on an iPhone, an Android phone or a Chromebook.
             </p>
             <p>
               <strong>I forgot the staff password or the Facility Admin passphrase.</strong> Your school&apos;s

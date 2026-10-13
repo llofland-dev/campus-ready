@@ -20,6 +20,14 @@ export default function SplashPage() {
         >
           Get Started
         </Link>
+
+        {/* Hidden once Campus Ready is already installed and running as an app (display-mode: standalone). */}
+        <Link
+          href="/install"
+          className="mt-4 text-sm text-zinc-500 underline [@media(display-mode:standalone)]:hidden"
+        >
+          Add to your home screen
+        </Link>
       </div>
 
       <div className="space-y-2 pb-8 text-center">

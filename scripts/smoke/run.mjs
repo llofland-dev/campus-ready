@@ -183,10 +183,17 @@ async function run() {
   const visitor = new Session();
 
   group("1. Site basics");
-  for (const path of ["/menu", "/code", "/offline.html", "/manifest.webmanifest", "/privacy", "/terms", "/support"]) {
+  for (const path of ["/menu", "/code", "/offline.html", "/manifest.webmanifest", "/privacy", "/terms", "/support", "/install"]) {
     const r = await visitor.page(path);
     check(`${path} loads`, r.status === 200, `HTTP ${r.status}`);
   }
+  // The install page is how new staff add the app to a phone, and its QR code is printed on posters, so both
+  // must keep working: the three device sections, the offline-readiness instruction, and a QR code (inline SVG
+  // with a sizeable drawn path) that is reachable from the home page.
+  const install = await visitor.page("/install");
+  check("install page has iPhone, Android and Chromebook steps and the wait-for-Ready-offline instruction", ["iPhone or iPad", "Android phone or tablet", "Chromebook or computer", "Add to Home Screen", "Ready offline"].every((t) => install.html.includes(t)));
+  check("install page draws a QR code", /<svg[^>]*aria-label="QR code for the Campus Ready install page"[\s\S]*?<path d="M[^"]{500,}"/.test(install.html));
+  check("home page links to the install page", (await visitor.page("/")).html.includes('href="/install"'));
   const support = await visitor.page("/support");
   check("Support page says to call 911 first and how to reach us", support.html.includes("call 911 first") && support.html.includes("Admin@emergencyprepsolutions.org"));
   check("home page links to Support", (await visitor.page("/")).html.includes('href="/support"'));
